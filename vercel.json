@@ -11,9 +11,5 @@
     "app/api/entry/confirm/route.ts": {
       "maxDuration": 60
     }
-  },
-  "crons": [
-    { "path": "/api/cron/price-refresh", "schedule": "*/2 * * * *" },
-    { "path": "/api/cron/treasury-monitor", "schedule": "*/5 * * * *" }
-  ]
+  }
 }
