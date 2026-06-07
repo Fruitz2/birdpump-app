@@ -11,6 +11,14 @@ import Link from "next/link";
 import { useWallet } from "@/components/wallet/WalletProvider";
 import { apiGet } from "@/lib/client/api";
 import { avatarUrl } from "@/lib/profile/avatars";
+import { PumpBirdGame, type GameResult } from "@/components/game/PumpBirdGame";
+import { PaidGameSession } from "@/components/game/PaidGameSession";
+
+type GameMode = "idle" | "fun" | "paid";
+
+function makeFunSeed(): string {
+  return "fun:" + Math.random().toString(36).slice(2, 12) + ":" + Date.now();
+}
 
 type Pot = { pot: { potTokenAmount: string; allTimeHighScore: number; allTimeHighWallet: string | null } };
 type Leaderboard = {
@@ -76,6 +84,9 @@ export function LandingClient() {
   const [soundOn, setSoundOn] = useState(false);
   const [activeSection, setActiveSection] = useState("top");
   const [walletBusy, setWalletBusy] = useState(false);
+  const [gameMode, setGameMode] = useState<GameMode>("idle");
+  const [funSeed, setFunSeed] = useState<string>(() => makeFunSeed());
+  const [funScore, setFunScore] = useState<number | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tickerTrackRef = useRef<HTMLDivElement | null>(null);
 
@@ -205,6 +216,50 @@ export function LandingClient() {
   // ─────────────────────────────────────────
   // Wallet button
   // ─────────────────────────────────────────
+  const scrollToArena = useCallback(() => {
+    const arena = document.getElementById("play");
+    if (arena) {
+      window.scrollTo({
+        top: arena.getBoundingClientRect().top + window.pageYOffset - 70,
+        behavior: "smooth"
+      });
+    }
+  }, []);
+
+  const handlePlayPaid = useCallback(async () => {
+    setDrawerOpen(false);
+    setGameMode("paid");
+    setFunScore(null);
+    scrollToArena();
+    if (!wallet.authed && wallet.installed) {
+      try {
+        setWalletBusy(true);
+        await wallet.signIn();
+      } catch {
+        /* signIn surfaces its own error */
+      } finally {
+        setWalletBusy(false);
+      }
+    }
+  }, [scrollToArena, wallet]);
+
+  const handlePlayFun = useCallback(() => {
+    setDrawerOpen(false);
+    setFunScore(null);
+    setFunSeed(makeFunSeed());
+    setGameMode("fun");
+    scrollToArena();
+  }, [scrollToArena]);
+
+  const exitGame = useCallback(() => {
+    setGameMode("idle");
+    setFunScore(null);
+  }, []);
+
+  const handleFunComplete = useCallback((r: GameResult) => {
+    setFunScore(r.score);
+  }, []);
+
   const handleWallet = useCallback(async () => {
     if (walletBusy) return;
     setWalletBusy(true);
@@ -333,8 +388,8 @@ export function LandingClient() {
               Play Pump.Bird for just <span className="green">$1</span> worth of $PUMPBIRD. Beat the highscore and take everything.
             </p>
             <div className="hero-cta">
-              <Link className="btn btn-primary" href="/play">Play Now ›</Link>
-              <Link className="btn btn-ghost" href="/play-fun">Try For Free</Link>
+              <button type="button" className="btn btn-primary" onClick={handlePlayPaid}>Play Now ›</button>
+              <button type="button" className="btn btn-ghost" onClick={handlePlayFun}>Try For Free</button>
             </div>
             <div className="built-on">
               Built on <span className="pf"><span className="pf-pill" /> pump.fun</span>
@@ -393,28 +448,113 @@ export function LandingClient() {
             </div>
             <div className="arcade-in">
               <div className="game-screen" id="pumpbird-game-root">
-                <div className="gp">
-                  <span className="cloud c1" />
-                  <span className="cloud c2" />
-                  <span className="cloud c3" />
-                  <div className="skyline" />
-                  <span className="pipe p1" />
-                  <span className="pipe p2" />
-                  <div className="ground" />
-                  <Image className="gbird" src={`${BASE_ASSETS}avatar-default.png`} alt="" width={88} height={88} unoptimized />
-                  <div className="gp-text">
-                    <span className="big">GAME<br /><span className="g">WINDOW</span></span>
-                    <span className="sub">▸ TAP PLAY TO ENTER ◂</span>
+                {gameMode === "idle" ? (
+                  <div className="gp">
+                    <span className="cloud c1" />
+                    <span className="cloud c2" />
+                    <span className="cloud c3" />
+                    <div className="skyline" />
+                    <span className="pipe p1" />
+                    <span className="pipe p2" />
+                    <div className="ground" />
+                    <Image className="gbird" src={`${BASE_ASSETS}avatar-default.png`} alt="" width={88} height={88} unoptimized />
+                    <div className="gp-text">
+                      <span className="big">GAME<br /><span className="g">WINDOW</span></span>
+                      <span className="sub">▸ TAP PLAY TO ENTER ◂</span>
+                    </div>
+                    <div className="insert">▸ INSERT $1 — PRESS PLAY ◂</div>
+                    <div className="glass" />
                   </div>
-                  <div className="insert">▸ INSERT $1 — PRESS PLAY ◂</div>
-                  <div className="glass" />
-                </div>
+                ) : (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      background: "#030a03",
+                      overflow: "hidden"
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={exitGame}
+                      aria-label="Exit game"
+                      style={{
+                        position: "absolute",
+                        top: 8,
+                        right: 8,
+                        zIndex: 60,
+                        background: "rgba(255,45,120,0.15)",
+                        border: "2px solid #ff2d78",
+                        color: "#ff2d78",
+                        fontFamily: "'Press Start 2P', monospace",
+                        fontSize: 9,
+                        textShadow: "0 0 6px #ff2d78",
+                        padding: "6px 9px",
+                        letterSpacing: 1,
+                        cursor: "pointer"
+                      }}
+                    >
+                      ✕
+                    </button>
+                    {gameMode === "fun" ? (
+                      <PumpBirdGame
+                        key={funSeed}
+                        mode="fun"
+                        seed={funSeed}
+                        variant="custom"
+                        onComplete={handleFunComplete}
+                        onExit={exitGame}
+                      />
+                    ) : (
+                      <PaidGameSession onExit={exitGame} />
+                    )}
+                    {gameMode === "fun" && funScore !== null && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          bottom: 12,
+                          left: "50%",
+                          transform: "translateX(-50%)",
+                          zIndex: 55,
+                          display: "flex",
+                          gap: 10,
+                          background: "rgba(7,18,7,0.92)",
+                          border: "2px solid #00ff41",
+                          boxShadow: "0 0 16px rgba(0,255,65,0.4)",
+                          padding: "8px 12px",
+                          fontFamily: "'Press Start 2P', monospace"
+                        }}
+                      >
+                        <span style={{ fontSize: 10, color: "#00ff41", textShadow: "0 0 6px #00ff41", letterSpacing: 2 }}>
+                          SCORE {String(funScore).padStart(3, "0")}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => { setFunScore(null); setFunSeed(makeFunSeed()); }}
+                          style={{
+                            fontFamily: "'Press Start 2P', monospace",
+                            fontSize: 10,
+                            background: "rgba(255,45,120,0.15)",
+                            border: "2px solid #ff2d78",
+                            color: "#ff2d78",
+                            textShadow: "0 0 6px #ff2d78",
+                            padding: "6px 10px",
+                            letterSpacing: 1,
+                            cursor: "pointer"
+                          }}
+                        >
+                          ↺ AGAIN
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
           <div className="play-bar reveal">
-            <Link className="btn btn-primary big" href="/play">▶ Play Now — $1</Link>
+            <button type="button" className="btn btn-primary big" onClick={handlePlayPaid}>▶ Play Now — $1</button>
             <p className="play-meta">
               $1 ≈ <span className="green">{playAmt}</span> · <span className="pm-live">live price</span> · beat {highscore || "the high"} to take the pot
             </p>
@@ -589,7 +729,7 @@ export function LandingClient() {
                 <span className="w">The Pot Is Waiting.</span>
                 <span className="g">Can You Take It?</span>
               </h2>
-              <Link className="btn btn-primary big" href="/play">Play Pump.Bird</Link>
+              <button type="button" className="btn btn-primary big" onClick={handlePlayPaid}>Play Pump.Bird</button>
               <p className="cta-sub">Play for $1. Win everything.</p>
             </div>
             <div className="cta-bird-cell reveal">
@@ -618,18 +758,18 @@ export function LandingClient() {
           </div>
           <nav className="drawer-nav" aria-label="Mobile">
             <a href="#top" onClick={() => setDrawerOpen(false)}>Home</a>
-            <Link href="/play" className="play" onClick={() => setDrawerOpen(false)}>Play Now</Link>
+            <button type="button" className="play drawer-cta" onClick={() => { setDrawerOpen(false); handlePlayPaid(); }}>Play Now</button>
             <a href="#leaderboard" onClick={() => setDrawerOpen(false)}>Leaderboard</a>
             <a href="#how" onClick={() => setDrawerOpen(false)}>How It Works</a>
             <a href="#faq" onClick={() => setDrawerOpen(false)}>FAQ</a>
-            <Link href="/play-fun" onClick={() => setDrawerOpen(false)}>Play For Fun</Link>
+            <button type="button" className="drawer-cta" onClick={() => { setDrawerOpen(false); handlePlayFun(); }}>Play For Fun</button>
             <Link href="/counter" onClick={() => setDrawerOpen(false)}>Live Counter</Link>
           </nav>
           <div className="drawer-pot">
             <span className="label">Current Pot</span>
             <span className="v pot">{potUsdDisplay}</span>
           </div>
-          <Link className="btn btn-primary big" href="/play" onClick={() => setDrawerOpen(false)}>Play for $1</Link>
+          <button type="button" className="btn btn-primary big" onClick={() => { setDrawerOpen(false); handlePlayPaid(); }}>Play for $1</button>
         </div>
       </div>
 

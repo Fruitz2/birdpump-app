@@ -10,25 +10,47 @@ import { ApiError, apiGet, apiPost } from "@/lib/client/api";
 import { buildEntryTransaction } from "@/lib/client/entry-tx";
 
 type Quote = {
-  entryUsdCents: number;
-  tokenMint: string;
-  tokenDecimals: number;
-  tokenUsd: number;
-  tokenSol: number;
-  solUsd: number;
-  priceSource: string;
-  amount: {
+  // Sentinel — when `available: false`, no `amount`/`tokenUsd` fields are
+  // present. The price oracle hasn't found a real $PUMPBIRD market yet (token
+  // not launched or pre-graduation curve not seeded). Game can't open until
+  // this flips to true.
+  available?: boolean;
+  reason?: string;
+  entryUsdCents?: number;
+  tokenMint?: string;
+  tokenDecimals?: number;
+  tokenUsd?: number;
+  tokenSol?: number;
+  solUsd?: number;
+  priceSource?: string;
+  amount?: {
     target: string;
     min: string;
     max: string;
     display: { target: number; min: number; max: number };
   };
+  slippageBps?: number;
+  ttlMs?: number;
+  treasury?: string | null;
+  treasuryAta?: string | null;
+  cluster?: string;
+};
+
+function isQuoteReady(q: Quote): q is Quote & {
+  amount: NonNullable<Quote["amount"]>;
+  tokenUsd: number;
+  tokenDecimals: number;
   slippageBps: number;
   ttlMs: number;
-  treasury: string | null;
-  treasuryAta: string | null;
-  cluster: string;
-};
+  priceSource: string;
+} {
+  return (
+    q.available !== false &&
+    typeof q.tokenUsd === "number" &&
+    typeof q.tokenDecimals === "number" &&
+    q.amount?.display?.target !== undefined
+  );
+}
 
 type CreatedTicket = {
   ticket: {
@@ -102,6 +124,18 @@ export function PaidGameSession({ onExit }: { onExit?: () => void }) {
     const fetchQuote = async () => {
       try {
         const q = await apiGet<Quote>("/api/entry/quote");
+        if (!isQuoteReady(q)) {
+          setPhase((cur) =>
+            cur.type === "ready" || cur.type === "quote-loading"
+              ? {
+                  type: "error",
+                  message:
+                    "Game opens once $PUMPBIRD is live on pump.fun. Hang tight — the token oracle isn't seeded yet."
+                }
+              : cur
+          );
+          return;
+        }
         setPhase((cur) =>
           cur.type === "ready" || cur.type === "quote-loading"
             ? { type: "ready", quote: q }
@@ -373,7 +407,11 @@ function ReadyPanel({
   onPay: () => void;
   onExit?: () => void;
 }) {
-  const tokenAmount = formatNumber(quote.amount.display.target);
+  const target = quote.amount?.display?.target;
+  const tokenAmount = typeof target === "number" ? formatNumber(target) : "—";
+  const tokenUsd = quote.tokenUsd;
+  const slippageBps = quote.slippageBps ?? 300;
+  const ttlMs = quote.ttlMs ?? 10_000;
   return (
     <>
       <h2 style={h2Style}>Ready to Play</h2>
@@ -386,10 +424,10 @@ function ReadyPanel({
           = <strong style={{ color: "#00ff41" }}>{tokenAmount}</strong> $PUMPBIRD
         </div>
         <div style={{ fontSize: 9, color: "rgba(217,255,214,0.6)", marginTop: 8 }}>
-          @ ${formatPrice(quote.tokenUsd)} / token · source: {quote.priceSource}
+          @ ${typeof tokenUsd === "number" ? formatPrice(tokenUsd) : "—"} / token · source: {quote.priceSource ?? "—"}
         </div>
         <div style={{ fontSize: 9, color: "rgba(217,255,214,0.6)", marginTop: 4 }}>
-          slippage ±{(quote.slippageBps / 100).toFixed(1)}% · quote refresh {Math.round(quote.ttlMs / 1000)}s
+          slippage ±{(slippageBps / 100).toFixed(1)}% · quote refresh {Math.round(ttlMs / 1000)}s
         </div>
       </div>
       <button type="button" onClick={onPay} style={primaryBtnStyle}>

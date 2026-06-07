@@ -28,23 +28,17 @@ export default function PlayFunPage() {
       style={{
         position: "fixed",
         inset: 0,
-        background: "#030a03",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexDirection: "column"
+        background: "#030a03"
       }}
     >
-      <div style={{ width: "100%", height: "100%", maxWidth: 540 }}>
-        <PumpBirdGame
-          key={seed}
-          mode="fun"
-          seed={seed}
-          variant="custom"
-          onComplete={handleComplete}
-          onExit={() => (window.location.href = "/")}
-        />
-      </div>
+      <PumpBirdGame
+        key={seed}
+        mode="fun"
+        seed={seed}
+        variant="custom"
+        onComplete={handleComplete}
+        onExit={() => (window.location.href = "/")}
+      />
 
       {lastResult !== null && (
         <FunReplayCue score={lastResult.score} onAgain={playAgain} />
@@ -70,7 +64,8 @@ export default function PlayFunPage() {
             color: "#00ff41",
             textShadow: "0 0 6px #00ff41",
             padding: "6px 10px",
-            letterSpacing: 1
+            letterSpacing: 1,
+            textDecoration: "none"
           }}
         >
           ◂ HOME
@@ -85,7 +80,8 @@ export default function PlayFunPage() {
             color: "#ff2d78",
             textShadow: "0 0 6px #ff2d78",
             padding: "6px 10px",
-            letterSpacing: 1
+            letterSpacing: 1,
+            textDecoration: "none"
           }}
         >
           PLAY FOR REAL ↗

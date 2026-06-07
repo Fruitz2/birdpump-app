@@ -6,7 +6,7 @@
 // breaks score validation. If you change physics, change it in both places and
 // bump SIMULATOR_VERSION below.
 
-export const SIMULATOR_VERSION = 1;
+export const SIMULATOR_VERSION = 2;
 
 export type VariantId = "forked" | "custom";
 
@@ -112,12 +112,14 @@ export const VARIANT_CONFIGS: Record<VariantId, GameVariantConfig> = {
     groundHeight: 52,
     tickMs: 25,
     maxTicks: 7800,
-    gravity: 0.45,
-    flapVelocity: -8.5,
+    // 20% speed bump for SIMULATOR_VERSION 2 — same flap dynamics, faster
+    // pipe scroll + proportionally faster spawn so density stays the same.
+    gravity: 0.48,
+    flapVelocity: -8.8,
     jumpCooldownTicks: 1,
-    pipeDelayTicks: 60,
-    pipeSpeed: 2.8,
-    pipeGap: 170,
+    pipeDelayTicks: 50,
+    pipeSpeed: 3.36,
+    pipeGap: 175,
     pipeWidth: 72,
     pipeHeight: 480,
     pipeJitter: 0,

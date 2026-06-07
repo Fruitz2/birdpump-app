@@ -655,7 +655,9 @@ export function PumpBirdGame({
             display: "block",
             imageRendering: "pixelated",
             cursor: phase === "playing" ? "pointer" : "default",
-            willChange: "transform"
+            willChange: "transform",
+            transform: "translateZ(0)",
+            backfaceVisibility: "hidden"
           }}
           onPointerDown={onPointerDown}
         />
