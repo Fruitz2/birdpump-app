@@ -43,6 +43,9 @@ type Props = {
   height?: number;
   onComplete: (result: GameResult) => void;
   onExit?: () => void;
+  // When provided, tapping the canvas after death triggers this (used by
+  // /play-fun and the landing-cabinet free-play to start a fresh run on click).
+  onRestart?: () => void;
 };
 
 type Particle = {
@@ -72,7 +75,8 @@ export function PumpBirdGame({
   width,
   height,
   onComplete,
-  onExit
+  onExit,
+  onRestart
 }: Props) {
   const bgCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const gameCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -446,19 +450,43 @@ export function PumpBirdGame({
     onComplete({ score: s.score, ticks: s.tick, taps: tapsRef.current.slice() });
   }, [best, onComplete, spawnDeath]);
 
+  // Fullscreen toggle for the game container
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const toggleFullscreen = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      el.requestFullscreen().catch(() => {});
+    }
+  }, []);
+  useEffect(() => {
+    const onFs = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onFs);
+    return () => document.removeEventListener("fullscreenchange", onFs);
+  }, []);
+
   // Input bindings
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space" || e.code === "ArrowUp") {
         e.preventDefault();
+        if (phaseRef.current === "dead" && onRestart) {
+          onRestart();
+          return;
+        }
         flap();
+      } else if (e.code === "KeyF") {
+        e.preventDefault();
+        toggleFullscreen();
       } else if (e.code === "Escape" && onExit) {
         onExit();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [flap, onExit]);
+  }, [flap, onExit, onRestart, toggleFullscreen]);
 
   // Main loop
   useEffect(() => {
@@ -610,9 +638,15 @@ export function PumpBirdGame({
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       e.preventDefault();
+      // Dead-state click → restart (if parent supports it) instead of flap.
+      // Used by fun-mode + the embedded landing cabinet so a tap revives.
+      if (phaseRef.current === "dead" && onRestart) {
+        onRestart();
+        return;
+      }
       flap();
     },
-    [flap]
+    [flap, onRestart]
   );
 
   return (
@@ -662,6 +696,35 @@ export function PumpBirdGame({
           onPointerDown={onPointerDown}
         />
 
+        {/* Fullscreen toggle — visible in every phase */}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
+          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          title={isFullscreen ? "Exit fullscreen (F)" : "Fullscreen (F)"}
+          style={{
+            position: "absolute",
+            top: 10,
+            right: 10,
+            zIndex: 70,
+            width: 32,
+            height: 32,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(7,18,7,0.85)",
+            border: "2px solid #00ff41",
+            color: "#00ff41",
+            textShadow: "0 0 6px #00ff41",
+            fontFamily: "'Press Start 2P', monospace",
+            fontSize: 12,
+            cursor: "pointer",
+            padding: 0
+          }}
+        >
+          {isFullscreen ? "⛶" : "⤢"}
+        </button>
+
         {/* Game HUD — score + best */}
         {phase === "playing" && (
           <div
@@ -669,7 +732,7 @@ export function PumpBirdGame({
               position: "absolute",
               top: 16,
               left: 16,
-              right: 16,
+              right: 60,
               display: "flex",
               justifyContent: "space-between",
               pointerEvents: "none",
@@ -691,7 +754,8 @@ export function PumpBirdGame({
                   border: "2px solid #ff2d78",
                   color: "#ff2d78",
                   textShadow: "0 0 6px #ff2d78",
-                  padding: "4px 8px"
+                  padding: "4px 8px",
+                  alignSelf: "flex-start"
                 }}
               >
                 PLAY FOR FUN
@@ -818,6 +882,38 @@ export function PumpBirdGame({
             >
               {mode === "fun" ? "NGMI — TRY AGAIN" : "SCORE SUBMITTED"}
             </div>
+            {onRestart && (
+              <button
+                type="button"
+                onClick={onRestart}
+                style={{
+                  fontFamily: "'Press Start 2P', monospace",
+                  fontSize: 12,
+                  background: "rgba(0,255,65,0.12)",
+                  border: "3px solid #00ff41",
+                  color: "#00ff41",
+                  textShadow: "0 0 8px #00ff41",
+                  padding: "14px 28px",
+                  letterSpacing: 2,
+                  cursor: "pointer",
+                  marginBottom: 8
+                }}
+              >
+                ↺ TAP TO PLAY AGAIN
+              </button>
+            )}
+            {onRestart && (
+              <div style={{
+                fontSize: 8,
+                color: "rgba(0,255,65,0.7)",
+                letterSpacing: 1,
+                marginTop: 4,
+                marginBottom: 12,
+                animation: "pb-blink 1.2s step-end infinite"
+              }}>
+                ▸ TAP ANYWHERE / SPACE TO RETRY ◂
+              </div>
+            )}
             {onExit && (
               <button
                 type="button"

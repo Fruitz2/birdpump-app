@@ -504,6 +504,7 @@ export function LandingClient() {
                         variant="custom"
                         onComplete={handleFunComplete}
                         onExit={exitGame}
+                        onRestart={() => { setFunScore(null); setFunSeed(makeFunSeed()); }}
                       />
                     ) : (
                       <PaidGameSession onExit={exitGame} />

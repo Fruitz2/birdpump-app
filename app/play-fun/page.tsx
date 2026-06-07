@@ -38,6 +38,7 @@ export default function PlayFunPage() {
         variant="custom"
         onComplete={handleComplete}
         onExit={() => (window.location.href = "/")}
+        onRestart={playAgain}
       />
 
       {lastResult !== null && (
