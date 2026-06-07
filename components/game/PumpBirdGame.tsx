@@ -46,6 +46,10 @@ type Props = {
   // When provided, tapping the canvas after death triggers this (used by
   // /play-fun and the landing-cabinet free-play to start a fresh run on click).
   onRestart?: () => void;
+  // Skip the START GAME overlay and begin immediately when the sprite is ready.
+  // Used when the user clicks the landing cabinet — they already expressed
+  // intent to play, no second click needed.
+  autoStart?: boolean;
 };
 
 type Particle = {
@@ -76,7 +80,8 @@ export function PumpBirdGame({
   height,
   onComplete,
   onExit,
-  onRestart
+  onRestart,
+  autoStart
 }: Props) {
   const bgCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const gameCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -461,6 +466,30 @@ export function PumpBirdGame({
     spawnDeath(s.bird.x + s.bird.width / 2, s.bird.y + s.bird.height / 2);
     onComplete({ score: s.score, ticks: s.tick, taps: tapsRef.current.slice() });
   }, [best, onComplete, spawnDeath]);
+
+  // Auto-start when the sprite finishes loading (or use the procedural
+  // fallback). Polls cheaply 5x/sec for ~3 seconds.
+  useEffect(() => {
+    if (!autoStart) return;
+    let cancelled = false;
+    const start = Date.now();
+    const tryStart = () => {
+      if (cancelled) return;
+      if (phaseRef.current !== "start") return;
+      if (spriteReadyRef.current) {
+        flap();
+        return;
+      }
+      if (Date.now() - start < 3000) {
+        setTimeout(tryStart, 200);
+      } else {
+        // Sprite took too long — start anyway, fallback sprite will fill in
+        flap();
+      }
+    };
+    tryStart();
+    return () => { cancelled = true; };
+  }, [autoStart, flap]);
 
   // Fullscreen toggle for the game container
   const [isFullscreen, setIsFullscreen] = useState(false);

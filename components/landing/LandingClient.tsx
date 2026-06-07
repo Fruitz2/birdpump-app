@@ -87,6 +87,10 @@ export function LandingClient() {
   const [gameMode, setGameMode] = useState<GameMode>("idle");
   const [funSeed, setFunSeed] = useState<string>(() => makeFunSeed());
   const [funScore, setFunScore] = useState<number | null>(null);
+  // When true, the fun game starts playing immediately instead of showing
+  // a START GAME overlay — set when the user clicks the cabinet placeholder
+  // so the "tap to enter" gesture turns into actually entering.
+  const [funAutoStart, setFunAutoStart] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tickerTrackRef = useRef<HTMLDivElement | null>(null);
 
@@ -247,9 +251,19 @@ export function LandingClient() {
     setDrawerOpen(false);
     setFunScore(null);
     setFunSeed(makeFunSeed());
+    setFunAutoStart(false);
     setGameMode("fun");
     scrollToArena();
   }, [scrollToArena]);
+
+  // Click on cabinet placeholder → mount fun game AND auto-start it.
+  // One tap to play — matches the "TAP PLAY TO ENTER" cue.
+  const handleCabinetClick = useCallback(() => {
+    setFunScore(null);
+    setFunSeed(makeFunSeed());
+    setFunAutoStart(true);
+    setGameMode("fun");
+  }, []);
 
   const exitGame = useCallback(() => {
     setGameMode("idle");
@@ -473,7 +487,24 @@ export function LandingClient() {
             <div className="arcade-in">
               <div className="game-screen" id="pumpbird-game-root">
                 {gameMode === "idle" ? (
-                  <div className="gp">
+                  <button
+                    type="button"
+                    onClick={handleCabinetClick}
+                    aria-label="Tap to play Pump.Bird for free"
+                    className="gp gp-clickable"
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                      background: "transparent",
+                      border: 0,
+                      padding: 0,
+                      cursor: "pointer",
+                      font: "inherit",
+                      color: "inherit"
+                    }}
+                  >
                     <span className="cloud c1" />
                     <span className="cloud c2" />
                     <span className="cloud c3" />
@@ -483,12 +514,12 @@ export function LandingClient() {
                     <div className="ground" />
                     <Image className="gbird" src={`${BASE_ASSETS}avatar-default.png`} alt="" width={88} height={88} unoptimized />
                     <div className="gp-text">
-                      <span className="big">GAME<br /><span className="g">WINDOW</span></span>
-                      <span className="sub">▸ TAP PLAY TO ENTER ◂</span>
+                      <span className="big">TAP<br /><span className="g">TO PLAY</span></span>
+                      <span className="sub">▸ FREE — NO ENTRY ◂</span>
                     </div>
-                    <div className="insert">▸ INSERT $1 — PRESS PLAY ◂</div>
+                    <div className="insert">▸ OR PRESS PLAY NOW FOR $1 ◂</div>
                     <div className="glass" />
-                  </div>
+                  </button>
                 ) : (
                   <div
                     style={{
@@ -526,9 +557,10 @@ export function LandingClient() {
                         mode="fun"
                         seed={funSeed}
                         variant="custom"
+                        autoStart={funAutoStart}
                         onComplete={handleFunComplete}
                         onExit={exitGame}
-                        onRestart={() => { setFunScore(null); setFunSeed(makeFunSeed()); }}
+                        onRestart={() => { setFunScore(null); setFunSeed(makeFunSeed()); setFunAutoStart(true); }}
                       />
                     ) : (
                       <PaidGameSession onExit={exitGame} />

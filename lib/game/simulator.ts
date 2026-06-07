@@ -6,7 +6,7 @@
 // breaks score validation. If you change physics, change it in both places and
 // bump SIMULATOR_VERSION below.
 
-export const SIMULATOR_VERSION = 5;
+export const SIMULATOR_VERSION = 6;
 
 // Progressive difficulty curve (custom variant only).
 // The base config values are the MIDGAME anchor (reached at score 30).
@@ -117,6 +117,12 @@ export type GameState = {
   gameover: boolean;
   bird: BirdState;
   pipes: PipePair[];
+  // Gap-center Y of the most recently spawned pipe. Used by the next spawn to
+  // push the new gap AWAY from this one — kills the "tunnel" effect where
+  // consecutive pipes have similar Y and the bird feels like it's flying down
+  // a hallway instead of dodging pillars. Optional for backwards-compat with
+  // older saved states; treated as undefined if absent.
+  lastGapY?: number;
 };
 
 export type SimulationResult = {
@@ -239,9 +245,22 @@ export function stepGame(state: GameState, tap: boolean): GameState {
   const diff = difficultyFor(next.score, config);
 
   if (next.pipeDelay < 0) {
-    next.pipeDelay = diff.pipeDelayTicks;
-    next.pipes.push(createPipePair(config, state.seed, next.nextPipeId, diff.pipeGap));
+    const newPipe = createPipePair(
+      config,
+      state.seed,
+      next.nextPipeId,
+      diff.pipeGap,
+      state.lastGapY
+    );
+    next.pipes.push(newPipe);
+    next.lastGapY = newPipe.southY + config.pipeHeight + diff.pipeGap / 2;
     next.nextPipeId += 1;
+    // Variable spawn delay for "wave" feel — sometimes 65% of base
+    // (clustered pipes), sometimes 135% (a breather). Deterministic
+    // per-pipe-id so server replay matches.
+    const delayRandom = random01(`${state.seed}:${config.id}:delay:${next.nextPipeId}`);
+    const variance = 0.65 + delayRandom * 0.7;
+    next.pipeDelay = Math.round(diff.pipeDelayTicks * variance);
   }
 
   next.pipes = next.pipes
@@ -327,7 +346,8 @@ function createPipePair(
   config: GameVariantConfig,
   seed: string,
   id: number,
-  gapOverride?: number
+  gapOverride?: number,
+  prevGapCenterY?: number
 ): PipePair {
   const random = random01(`${seed}:${config.id}:pipe:${id}`);
   const gap = gapOverride ?? config.pipeGap;
@@ -339,7 +359,25 @@ function createPipePair(
     const safeGap = Math.max(120, Math.min(260, gap));
     const minY = 60;
     const maxY = config.height - config.groundHeight - safeGap - 60;
-    const gapY = minY + random * Math.max(1, maxY - minY);
+    let gapY = minY + random * Math.max(1, maxY - minY);
+
+    // Anti-clustering: if the previous pipe's gap center is too close to this
+    // one's candidate position, reflect across the playfield center so the
+    // bird actually has to move up/down between pipes. Range threshold is
+    // ~30% of playable Y so two pipes in a row never sit on top of each other.
+    if (typeof prevGapCenterY === "number") {
+      const candidateCenter = gapY + safeGap / 2;
+      const playableRange = maxY - minY + safeGap;
+      const minSeparation = playableRange * 0.30;
+      if (Math.abs(candidateCenter - prevGapCenterY) < minSeparation) {
+        const playCenter = (minY + safeGap / 2 + maxY + safeGap / 2) / 2;
+        const reflectedCenter = playCenter * 2 - candidateCenter;
+        gapY = reflectedCenter - safeGap / 2;
+        // Clamp back into legal range
+        gapY = Math.max(minY, Math.min(maxY, gapY));
+      }
+    }
+
     southY = gapY - config.pipeHeight;
     northY = gapY + safeGap;
   } else {
