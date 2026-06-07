@@ -6,7 +6,56 @@
 // breaks score validation. If you change physics, change it in both places and
 // bump SIMULATOR_VERSION below.
 
-export const SIMULATOR_VERSION = 3;
+export const SIMULATOR_VERSION = 4;
+
+// Progressive difficulty curve (custom variant only).
+// The base config values are the MIDGAME anchor (reached at score 30).
+// Below 30: pipes are sparser, gaps are wider, scroll is slower. Above 30 the
+// curve continues toward a slightly-tighter endgame at score 60.
+// Anchored at three points so each phase can be tuned independently without
+// touching the simulator math.
+type Diff = { pipeSpeed: number; pipeDelayTicks: number; pipeGap: number };
+
+const EASY: Diff   = { pipeSpeed: 2.55, pipeDelayTicks: 77, pipeGap: 200 };
+const HARD: Diff   = { pipeSpeed: 3.40, pipeDelayTicks: 42, pipeGap: 156 };
+const RAMP_MID_SCORE = 30;
+const RAMP_HARD_SCORE = 60;
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+export function difficultyFor(score: number, config: GameVariantConfig): Diff {
+  // forked variant: no progression, keep the static config
+  if (config.id !== "custom") {
+    return {
+      pipeSpeed: config.pipeSpeed,
+      pipeDelayTicks: config.pipeDelayTicks,
+      pipeGap: config.pipeGap
+    };
+  }
+  const mid: Diff = {
+    pipeSpeed: config.pipeSpeed,
+    pipeDelayTicks: config.pipeDelayTicks,
+    pipeGap: config.pipeGap
+  };
+  if (score <= 0) return { ...EASY };
+  if (score >= RAMP_HARD_SCORE) return { ...HARD };
+  if (score <= RAMP_MID_SCORE) {
+    const t = score / RAMP_MID_SCORE;
+    return {
+      pipeSpeed: lerp(EASY.pipeSpeed, mid.pipeSpeed, t),
+      pipeDelayTicks: Math.round(lerp(EASY.pipeDelayTicks, mid.pipeDelayTicks, t)),
+      pipeGap: Math.round(lerp(EASY.pipeGap, mid.pipeGap, t))
+    };
+  }
+  const t = (score - RAMP_MID_SCORE) / (RAMP_HARD_SCORE - RAMP_MID_SCORE);
+  return {
+    pipeSpeed: lerp(mid.pipeSpeed, HARD.pipeSpeed, t),
+    pipeDelayTicks: Math.round(lerp(mid.pipeDelayTicks, HARD.pipeDelayTicks, t)),
+    pipeGap: Math.round(lerp(mid.pipeGap, HARD.pipeGap, t))
+  };
+}
 
 export type VariantId = "forked" | "custom";
 
@@ -183,14 +232,20 @@ export function stepGame(state: GameState, tap: boolean): GameState {
   bird.y += bird.yVel;
   bird.rotation = Math.min(Math.PI / 2, ((90 * (bird.yVel + 20)) / 20 - 90) * (Math.PI / 180));
 
+  // Difficulty ramps with score. Pipe spawn delay + scroll speed + gap height
+  // all interpolate. New pipes use the gap height current at SPAWN TIME — once
+  // a pipe exists it keeps its own gap; the scroll speed it moves at is the
+  // live value so a long-lived run smoothly accelerates.
+  const diff = difficultyFor(next.score, config);
+
   if (next.pipeDelay < 0) {
-    next.pipeDelay = config.pipeDelayTicks;
-    next.pipes.push(createPipePair(config, state.seed, next.nextPipeId));
+    next.pipeDelay = diff.pipeDelayTicks;
+    next.pipes.push(createPipePair(config, state.seed, next.nextPipeId, diff.pipeGap));
     next.nextPipeId += 1;
   }
 
   next.pipes = next.pipes
-    .map((pipe) => ({ ...pipe, x: pipe.x - config.pipeSpeed }))
+    .map((pipe) => ({ ...pipe, x: pipe.x - diff.pipeSpeed }))
     .filter((pipe) => pipe.x + config.pipeWidth >= -4);
 
   for (const pipe of next.pipes) {
@@ -268,20 +323,26 @@ export function hashTapLog(
     .padStart(8, "0");
 }
 
-function createPipePair(config: GameVariantConfig, seed: string, id: number): PipePair {
+function createPipePair(
+  config: GameVariantConfig,
+  seed: string,
+  id: number,
+  gapOverride?: number
+): PipePair {
   const random = random01(`${seed}:${config.id}:pipe:${id}`);
+  const gap = gapOverride ?? config.pipeGap;
   let southY: number;
   let northY: number;
 
   if (config.pipeModel === "source") {
     const minY = 60;
-    const maxY = config.height - config.groundHeight - config.pipeGap - 60;
+    const maxY = config.height - config.groundHeight - gap - 60;
     const gapY = minY + random * Math.max(1, maxY - minY);
     southY = gapY - config.pipeHeight;
-    northY = gapY + config.pipeGap;
+    northY = gapY + gap;
   } else {
     southY = -(random * config.pipeJitter) - config.pipeHeight / 2;
-    northY = southY + config.pipeHeight + config.pipeGap;
+    northY = southY + config.pipeHeight + gap;
   }
 
   return { id, x: config.width + 2, southY, northY, scored: false };
