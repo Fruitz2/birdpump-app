@@ -2,15 +2,58 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { WalletProvider } from "@/components/wallet/WalletProvider";
 
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://birdpump-app.vercel.app";
+const TITLE = "PUMP.BIRD — The Highscore Takes the Pot.";
+const DESCRIPTION =
+  "Pay $1 in $PUMPBIRD, play the game, beat the highscore — win the entire pot. Built on pump.fun, on Solana.";
+
 export const metadata: Metadata = {
-  title: "PUMP.BIRD — The Highscore Takes the Pot",
-  description:
-    "Play Pump.Bird for $1 worth of $PUMPBIRD. Beat the highscore and take the entire pot. Built on pump.fun, on Solana.",
-  metadataBase: new URL("https://birdpump.fun"),
+  metadataBase: new URL(SITE),
+  title: {
+    default: TITLE,
+    template: "%s · PUMP.BIRD"
+  },
+  description: DESCRIPTION,
+  applicationName: "PUMP.BIRD",
+  keywords: [
+    "pumpbird",
+    "pump.bird",
+    "pump.fun",
+    "solana",
+    "memecoin",
+    "flappy bird",
+    "game",
+    "pot",
+    "highscore"
+  ],
+  authors: [{ name: "PUMP.BIRD" }],
+  creator: "PUMP.BIRD",
+  publisher: "PUMP.BIRD",
+  formatDetection: { email: false, address: false, telephone: false },
+  themeColor: "#65ff48",
   openGraph: {
-    title: "PUMP.BIRD",
-    description: "Beat the highscore, take the pot.",
-    images: ["/assets/pumpbird/logo.png"]
+    type: "website",
+    url: SITE,
+    siteName: "PUMP.BIRD",
+    title: TITLE,
+    description: DESCRIPTION,
+    locale: "en_US"
+    // images: handled automatically by app/opengraph-image.png
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+    creator: "@pumpbird"
+    // images: handled automatically by app/twitter-image.png
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large" }
+  },
+  other: {
+    "telegram:channel": "@pumpbird"
   }
 };
 

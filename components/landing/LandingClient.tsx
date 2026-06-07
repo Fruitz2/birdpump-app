@@ -23,7 +23,12 @@ type Leaderboard = {
     totalWonTokens: string;
   }>;
 };
-type Quote = { tokenUsd: number; tokenDecimals: number; amount: { display: { target: number } } };
+type Quote = {
+  available?: boolean;
+  tokenUsd?: number;
+  tokenDecimals?: number;
+  amount?: { display?: { target?: number } };
+};
 
 const POT_POLL_MS = 5_000;
 const BOARD_POLL_MS = 15_000;
@@ -88,7 +93,13 @@ export function LandingClient() {
       if (cancelled) return;
       if (p) setPot(p.pot);
       if (l) setBoard(l.leaderboard);
-      if (q) setQuote(q);
+      // Only keep quote if it has a real price — the dev/pre-launch sentinel
+      // `{ available: false }` would crash the price-display reads otherwise.
+      if (q && q.available !== false && typeof q.tokenUsd === "number") {
+        setQuote(q);
+      } else {
+        setQuote(null);
+      }
     }
     refresh();
     const potId = setInterval(async () => {
@@ -101,7 +112,12 @@ export function LandingClient() {
     }, BOARD_POLL_MS);
     const quoteId = setInterval(async () => {
       const q = await apiGet<Quote>("/api/entry/quote").catch(() => null);
-      if (!cancelled && q) setQuote(q);
+      if (cancelled) return;
+      if (q && q.available !== false && typeof q.tokenUsd === "number") {
+        setQuote(q);
+      } else {
+        setQuote(null);
+      }
     }, QUOTE_POLL_MS);
     return () => {
       cancelled = true;
@@ -224,7 +240,7 @@ export function LandingClient() {
   // Derived display values
   // ─────────────────────────────────────────
   const potUsdDisplay = (() => {
-    if (!pot || !quote) return "—";
+    if (!pot || !quote || typeof quote.tokenUsd !== "number" || typeof quote.tokenDecimals !== "number") return "—";
     try {
       const raw = BigInt(pot.potTokenAmount);
       const div = BigInt(10) ** BigInt(quote.tokenDecimals);
@@ -239,7 +255,8 @@ export function LandingClient() {
   const champion = board[0] ?? null;
   const championName = champion?.displayName ?? (champion?.wallet ? short(champion.wallet) : "—");
   const highscore = pot?.allTimeHighScore ?? 0;
-  const playAmt = quote ? `${fmtNumber(quote.amount.display.target)} $PUMPBIRD` : "—";
+  const playAmtTarget = quote?.amount?.display?.target;
+  const playAmt = typeof playAmtTarget === "number" ? `${fmtNumber(playAmtTarget)} $PUMPBIRD` : "—";
 
   return (
     <>
