@@ -6,7 +6,7 @@
 // breaks score validation. If you change physics, change it in both places and
 // bump SIMULATOR_VERSION below.
 
-export const SIMULATOR_VERSION = 4;
+export const SIMULATOR_VERSION = 5;
 
 // Progressive difficulty curve (custom variant only).
 // The base config values are the MIDGAME anchor (reached at score 30).
@@ -335,11 +335,13 @@ function createPipePair(
   let northY: number;
 
   if (config.pipeModel === "source") {
+    // Defensive: clamp gap so we can never accidentally produce a wall.
+    const safeGap = Math.max(120, Math.min(260, gap));
     const minY = 60;
-    const maxY = config.height - config.groundHeight - gap - 60;
+    const maxY = config.height - config.groundHeight - safeGap - 60;
     const gapY = minY + random * Math.max(1, maxY - minY);
     southY = gapY - config.pipeHeight;
-    northY = gapY + gap;
+    northY = gapY + safeGap;
   } else {
     southY = -(random * config.pipeJitter) - config.pipeHeight / 2;
     northY = southY + config.pipeHeight + gap;
@@ -364,8 +366,16 @@ function pipeCollides(pipe: PipePair, bird: BirdState, config: GameVariantConfig
   return topHit || bottomHit;
 }
 
+// FNV-1a alone has weak avalanche on sequential keys like "pipe:0", "pipe:1"
+// — the resulting gap positions clustered too tightly. We pass the FNV output
+// through the Murmur3 finalizer (xor-shift + multiply) to get a properly
+// uniform distribution across [0, 1). Still 100% deterministic.
 function random01(input: string): number {
-  return fnv1a(input) / 0xffffffff;
+  let h = fnv1a(input);
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  h = (h ^ (h >>> 16)) >>> 0;
+  return h / 0xffffffff;
 }
 
 function fnv1a(input: string): number {

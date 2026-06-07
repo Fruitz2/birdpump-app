@@ -692,7 +692,10 @@ export function PumpBirdGame({
           ref={bgCanvasRef}
           style={{
             position: "absolute",
-            inset: 0,
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
             display: "block",
             imageRendering: "pixelated"
           }}
@@ -701,18 +704,24 @@ export function PumpBirdGame({
           ref={gameCanvasRef}
           style={{
             position: "absolute",
-            inset: 0,
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
             display: "block",
             imageRendering: "pixelated",
             cursor: phase === "playing" ? "pointer" : "default",
             willChange: "transform",
             transform: "translateZ(0)",
-            backfaceVisibility: "hidden"
+            backfaceVisibility: "hidden",
+            touchAction: "none"
           }}
           onPointerDown={onPointerDown}
         />
 
-        {/* Fullscreen toggle — visible in every phase */}
+        {/* Fullscreen toggle — visible in every phase. Top-LEFT so it never
+            collides with the landing-cabinet's ✕ close button (top-right) or
+            with the score HUD. */}
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
@@ -721,7 +730,7 @@ export function PumpBirdGame({
           style={{
             position: "absolute",
             top: 10,
-            right: 10,
+            left: 10,
             zIndex: 70,
             width: 32,
             height: 32,
@@ -747,8 +756,8 @@ export function PumpBirdGame({
             style={{
               position: "absolute",
               top: 16,
-              left: 16,
-              right: 60,
+              left: 60,
+              right: 16,
               display: "flex",
               justifyContent: "space-between",
               pointerEvents: "none",
