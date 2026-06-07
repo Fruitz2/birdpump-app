@@ -68,6 +68,134 @@ const TICK_MS = 25;          // matches simulator tickMs for custom variant
 const TARGET_ASPECT = 480 / 853; // 9:16-ish, matches simulator
 const MAX_W = 540;
 const MAX_H = 960;
+
+// ────────────────────────────────────────────────────────────
+// Sound. Web Audio API, programmatically generated. Zero assets.
+//
+// Three sounds, each carefully tuned:
+//   FLAP   — quick rising square-wave blip, 200→700Hz pitch sweep,
+//            ~55ms total. Punchy 8-bit arcade feel for every wing flap.
+//   SCORE  — bright bell arpeggio E6→G6 (sine waves, two notes 40ms
+//            apart). Rewarding chime when a pipe passes.
+//   DEATH  — pitched-down sawtooth crash (600→80Hz) plus a brief
+//            filtered noise burst. Half-second descending REKT moment.
+//
+// AudioContext is lazy-created on the first user gesture (browsers
+// block autoplay otherwise) and reused for every cue.
+// ────────────────────────────────────────────────────────────
+class GameAudio {
+  private ctx: AudioContext | null = null;
+  private master: GainNode | null = null;
+  private noiseBuffer: AudioBuffer | null = null;
+  enabled = true;
+
+  private ensure(): boolean {
+    if (this.ctx) return true;
+    try {
+      const Ctx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) return false;
+      this.ctx = new Ctx();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.55;
+      this.master.connect(this.ctx.destination);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private noise(): AudioBuffer | null {
+    if (!this.ctx) return null;
+    if (this.noiseBuffer) return this.noiseBuffer;
+    const sr = this.ctx.sampleRate;
+    const len = Math.floor(sr * 0.45);
+    const buf = this.ctx.createBuffer(1, len, sr);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i += 1) data[i] = (Math.random() - 0.5) * 2;
+    this.noiseBuffer = buf;
+    return buf;
+  }
+
+  flap(): void {
+    if (!this.enabled || !this.ensure() || !this.ctx || !this.master) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(220, t);
+    osc.frequency.exponentialRampToValueAtTime(720, t + 0.05);
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.22, t + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    osc.connect(gain).connect(this.master);
+    osc.start(t);
+    osc.stop(t + 0.07);
+  }
+
+  score(): void {
+    if (!this.enabled || !this.ensure() || !this.ctx || !this.master) return;
+    const t = this.ctx.currentTime;
+    // Two-note bell: E6 then G6.
+    [1318.51, 1567.98].forEach((freq, i) => {
+      const start = t + i * 0.05;
+      const osc = this.ctx!.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = this.ctx!.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.18, start + 0.006);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
+      osc.connect(gain).connect(this.master!);
+      osc.start(start);
+      osc.stop(start + 0.18);
+    });
+  }
+
+  death(): void {
+    if (!this.enabled || !this.ensure() || !this.ctx || !this.master) return;
+    const t = this.ctx.currentTime;
+    // Pitched-down sawtooth: 600Hz → 80Hz over 500ms
+    const osc = this.ctx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(600, t);
+    osc.frequency.exponentialRampToValueAtTime(80, t + 0.5);
+    const oscGain = this.ctx.createGain();
+    oscGain.gain.setValueAtTime(0.0001, t);
+    oscGain.gain.exponentialRampToValueAtTime(0.25, t + 0.01);
+    oscGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+    osc.connect(oscGain).connect(this.master);
+    osc.start(t);
+    osc.stop(t + 0.6);
+    // Filtered noise crash
+    const noiseBuf = this.noise();
+    if (noiseBuf) {
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = noiseBuf;
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 800;
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.0001, t);
+      noiseGain.gain.exponentialRampToValueAtTime(0.18, t + 0.005);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+      noise.connect(filter).connect(noiseGain).connect(this.master);
+      noise.start(t);
+      noise.stop(t + 0.28);
+    }
+  }
+
+  setEnabled(on: boolean): void {
+    this.enabled = on;
+  }
+
+  resume(): void {
+    if (this.ctx && this.ctx.state === "suspended") this.ctx.resume().catch(() => {});
+  }
+}
+const sharedAudio = new GameAudio();
+
 const PARTICLE_POOL = 200;
 const IDLE_SPRITE_URL = "/assets/game/pump-bird-idle.png";
 const DEAD_SPRITE_URL = "/assets/game/pump-bird-dead.png";
@@ -99,6 +227,24 @@ export function PumpBirdGame({
   // Size lives in state so the wrap div re-renders with correct dimensions
   // once we measure the viewport. (Initial render before measurement has w=0.)
   const [size, setSize] = useState({ w: 0, h: 0 });
+  // Sound on/off — persists across sessions via localStorage
+  const [soundOn, setSoundOn] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      const stored = window.localStorage.getItem("pumpBirdSound");
+      return stored === null ? true : stored === "1";
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    sharedAudio.setEnabled(soundOn);
+    try {
+      window.localStorage.setItem("pumpBirdSound", soundOn ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [soundOn]);
   const sizeRef = useRef({ w: 0, h: 0 });
   const idleSpriteRef = useRef<HTMLImageElement | HTMLCanvasElement | null>(null);
   const deadSpriteRef = useRef<HTMLImageElement | HTMLCanvasElement | null>(null);
@@ -520,7 +666,12 @@ export function PumpBirdGame({
         flap();
       } else if (e.code === "KeyF") {
         e.preventDefault();
+        sharedAudio.resume();
         toggleFullscreen();
+      } else if (e.code === "KeyM") {
+        e.preventDefault();
+        sharedAudio.resume();
+        setSoundOn((v) => !v);
       } else if (e.code === "Escape" && onExit) {
         onExit();
       }
@@ -562,6 +713,7 @@ export function PumpBirdGame({
               stateRef.current.bird.x + stateRef.current.bird.width / 2,
               stateRef.current.bird.y + stateRef.current.bird.height / 2
             );
+            sharedAudio.flap();
           } else {
             stateRef.current = stepGame(stateRef.current, false);
           }
@@ -569,8 +721,10 @@ export function PumpBirdGame({
           // Sync displayed score on tick boundary
           if (stateRef.current.score !== prevStateRef.current.score) {
             setScore(stateRef.current.score);
+            sharedAudio.score();
           }
           if (stateRef.current.gameover) {
+            sharedAudio.death();
             handleGameOver();
             break;
           }
@@ -748,12 +902,10 @@ export function PumpBirdGame({
           onPointerDown={onPointerDown}
         />
 
-        {/* Fullscreen toggle — visible in every phase. Top-LEFT so it never
-            collides with the landing-cabinet's ✕ close button (top-right) or
-            with the score HUD. */}
+        {/* Fullscreen toggle — top-LEFT to not collide with landing's ✕ */}
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
+          onClick={(e) => { e.stopPropagation(); toggleFullscreen(); sharedAudio.resume(); }}
           aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
           title={isFullscreen ? "Exit fullscreen (F)" : "Fullscreen (F)"}
           style={{
@@ -777,6 +929,38 @@ export function PumpBirdGame({
           }}
         >
           {isFullscreen ? "⛶" : "⤢"}
+        </button>
+        {/* Sound toggle — stacks under the fullscreen button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            sharedAudio.resume();
+            setSoundOn((v) => !v);
+          }}
+          aria-label={soundOn ? "Mute sound" : "Unmute sound"}
+          title={soundOn ? "Mute (M)" : "Unmute (M)"}
+          style={{
+            position: "absolute",
+            top: 50,
+            left: 10,
+            zIndex: 70,
+            width: 32,
+            height: 32,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(7,18,7,0.85)",
+            border: "2px solid #00ff41",
+            color: "#00ff41",
+            textShadow: "0 0 6px #00ff41",
+            fontFamily: "'Press Start 2P', monospace",
+            fontSize: 12,
+            cursor: "pointer",
+            padding: 0
+          }}
+        >
+          {soundOn ? "♪" : "✕"}
         </button>
 
         {/* Game HUD — score + best */}

@@ -6,7 +6,7 @@
 // breaks score validation. If you change physics, change it in both places and
 // bump SIMULATOR_VERSION below.
 
-export const SIMULATOR_VERSION = 6;
+export const SIMULATOR_VERSION = 7;
 
 // Progressive difficulty curve (custom variant only).
 // The base config values are the MIDGAME anchor (reached at score 30).
@@ -16,8 +16,11 @@ export const SIMULATOR_VERSION = 6;
 // touching the simulator math.
 type Diff = { pipeSpeed: number; pipeDelayTicks: number; pipeGap: number };
 
-const EASY: Diff   = { pipeSpeed: 2.55, pipeDelayTicks: 77, pipeGap: 200 };
-const HARD: Diff   = { pipeSpeed: 3.40, pipeDelayTicks: 42, pipeGap: 156 };
+const EASY: Diff   = { pipeSpeed: 2.55, pipeDelayTicks: 82, pipeGap: 200 };
+const HARD: Diff   = { pipeSpeed: 3.40, pipeDelayTicks: 50, pipeGap: 156 };
+// Minimum pixels between two consecutive pipes so the bird always has room
+// to thread, no matter what the variance roll gives.
+const MIN_PIPE_SPACING_PX = 175;
 const RAMP_MID_SCORE = 30;
 const RAMP_HARD_SCORE = 60;
 
@@ -255,12 +258,19 @@ export function stepGame(state: GameState, tap: boolean): GameState {
     next.pipes.push(newPipe);
     next.lastGapY = newPipe.southY + config.pipeHeight + diff.pipeGap / 2;
     next.nextPipeId += 1;
-    // Variable spawn delay for "wave" feel — sometimes 65% of base
-    // (clustered pipes), sometimes 135% (a breather). Deterministic
-    // per-pipe-id so server replay matches.
+    // Variable spawn delay for "wave" feel — ±18% of base
+    // (sometimes clustered, sometimes a breather). Deterministic
+    // per-pipe-id so server replay matches. Plus a hard floor so two
+    // pipes can never get visually closer than MIN_PIPE_SPACING_PX —
+    // protects against "impossible to thread" stretches when the
+    // variance roll lands low at high difficulty.
     const delayRandom = random01(`${state.seed}:${config.id}:delay:${next.nextPipeId}`);
-    const variance = 0.65 + delayRandom * 0.7;
-    next.pipeDelay = Math.round(diff.pipeDelayTicks * variance);
+    const variance = 0.82 + delayRandom * 0.36;
+    const safeMinDelay = Math.ceil(MIN_PIPE_SPACING_PX / diff.pipeSpeed);
+    next.pipeDelay = Math.max(
+      safeMinDelay,
+      Math.round(diff.pipeDelayTicks * variance)
+    );
   }
 
   next.pipes = next.pipes
