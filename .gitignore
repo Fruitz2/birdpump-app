@@ -1,0 +1,16 @@
+node_modules
+.next
+out
+dist
+.vercel
+.env
+.env.local
+.env*.local
+*.log
+.DS_Store
+.turbo
+.swc
+coverage
+drizzle/_journal
+.idea
+.vscode

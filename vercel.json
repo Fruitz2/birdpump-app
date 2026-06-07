@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["iad1"],
+  "functions": {
+    "app/api/**/*": {
+      "maxDuration": 30
+    },
+    "app/api/score/submit/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/entry/confirm/route.ts": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    { "path": "/api/cron/price-refresh", "schedule": "*/2 * * * *" },
+    { "path": "/api/cron/treasury-monitor", "schedule": "*/5 * * * *" }
+  ]
+}
