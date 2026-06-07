@@ -87,6 +87,11 @@ export const tickets = pgTable(
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     playedAt: timestamp("played_at", { withTimezone: true }),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    // Multi-life pack: a single payment unlocks `livesTotal` games. Each
+    // game uses a deterministic seed derived from ticket.seed + the
+    // life's index. livesUsed increments on every score submit.
+    livesTotal: integer("lives_total").default(1).notNull(),
+    livesUsed: integer("lives_used").default(0).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull()
@@ -121,6 +126,8 @@ export const scores = pgTable(
     taps: jsonb("taps").$type<number[]>().notNull(),
     epoch: integer("epoch").notNull(),
     winSettlementId: varchar("win_settlement_id", { length: 32 }),
+    // Index of this life within its multi-life ticket (0 for single-life).
+    lifeIndex: integer("life_index").default(0).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull()
@@ -129,7 +136,9 @@ export const scores = pgTable(
     walletIdx: index("scores_wallet_idx").on(t.wallet),
     epochScoreIdx: index("scores_epoch_score_idx").on(t.epoch, t.score),
     leaderboardIdx: index("scores_leaderboard_idx").on(t.score, t.ticks),
-    ticketUniq: uniqueIndex("scores_ticket_uniq").on(t.ticketId)
+    // One score per (ticket, life) — a multi-life ticket can have many
+    // scores but each life can only be submitted once.
+    ticketLifeUniq: uniqueIndex("scores_ticket_life_uniq").on(t.ticketId, t.lifeIndex)
   })
 );
 

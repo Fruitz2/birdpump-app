@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { WalletProvider } from "@/components/wallet/WalletProvider";
 
@@ -30,7 +30,6 @@ export const metadata: Metadata = {
   creator: "PUMP.BIRD",
   publisher: "PUMP.BIRD",
   formatDetection: { email: false, address: false, telephone: false },
-  themeColor: "#65ff48",
   openGraph: {
     type: "website",
     url: SITE,
@@ -55,6 +54,13 @@ export const metadata: Metadata = {
   other: {
     "telegram:channel": "@pumpbird"
   }
+};
+
+export const viewport: Viewport = {
+  themeColor: "#65ff48",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

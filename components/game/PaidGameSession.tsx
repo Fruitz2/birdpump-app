@@ -1,21 +1,28 @@
 "use client";
 
-// Full paid-entry game flow: connect → sign-in → quote → pay → play → submit.
-// Owns all the network calls so the page just mounts <PaidGameSession />.
+// Multi-life paid flow:
+//   connect → sign-in → pick lives → quote → wallet payment → confirm
+//   → play life 0 → submit → play life 1 → submit → … → all lives spent
+//
+// Players buy a "pack" of N lives in one tx (1, 5, 10, 25 by default), then
+// each play consumes one life. Game-over → tap to continue with the next
+// life. When the last life is spent, the user gets a buy-more prompt.
+//
+// Anti-cheat is preserved: each life's seed is seedForLife(ticket.seed, i)
+// and the server validates lifeIndex is sequential.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWallet } from "@/components/wallet/WalletProvider";
 import { PumpBirdGame, type GameResult } from "./PumpBirdGame";
 import { ApiError, apiGet, apiPost } from "@/lib/client/api";
 import { buildEntryTransaction } from "@/lib/client/entry-tx";
+import { seedForLife } from "@/lib/game/simulator";
 
 type Quote = {
-  // Sentinel — when `available: false`, no `amount`/`tokenUsd` fields are
-  // present. The price oracle hasn't found a real $PUMPBIRD market yet (token
-  // not launched or pre-graduation curve not seeded). Game can't open until
-  // this flips to true.
   available?: boolean;
   reason?: string;
+  lives?: number;
+  perLifeUsdCents?: number;
   entryUsdCents?: number;
   tokenMint?: string;
   tokenDecimals?: number;
@@ -43,11 +50,13 @@ function isQuoteReady(q: Quote): q is Quote & {
   slippageBps: number;
   ttlMs: number;
   priceSource: string;
+  perLifeUsdCents: number;
 } {
   return (
     q.available !== false &&
     typeof q.tokenUsd === "number" &&
     typeof q.tokenDecimals === "number" &&
+    typeof q.perLifeUsdCents === "number" &&
     q.amount?.display?.target !== undefined
   );
 }
@@ -60,6 +69,8 @@ type CreatedTicket = {
     memo: string;
     status: "pending";
     entryUsdCents: number;
+    perLifeUsdCents: number;
+    lives: number;
     tokenUsd: number;
     quoteExpiresAt: string;
     ticketExpiresAt: string;
@@ -91,77 +102,92 @@ type SubmitResponse = {
   ticks: number;
   tapsCount: number;
   checksum: string;
+  lifeIndex: number;
+  livesRemaining: number;
+  lastLife: boolean;
   settlement: Settlement | null;
 };
 
 type Phase =
   | { type: "idle" }
-  | { type: "connecting" }
   | { type: "signing-in" }
   | { type: "quote-loading" }
-  | { type: "ready"; quote: Quote }
-  | { type: "creating-ticket" }
+  | { type: "pick-lives"; quote: Quote }
+  | { type: "creating-ticket"; lives: number }
   | { type: "paying"; ticket: CreatedTicket }
   | { type: "confirming"; ticket: CreatedTicket; signature: string }
-  | { type: "playing"; ticket: CreatedTicket }
-  | { type: "submitting"; ticket: CreatedTicket; localResult: GameResult }
-  | { type: "result"; ticket: CreatedTicket; submit: SubmitResponse }
+  | { type: "in-game"; ticket: CreatedTicket; lifeIndex: number; autoStart: boolean }
+  | {
+      type: "submitting-life";
+      ticket: CreatedTicket;
+      lifeIndex: number;
+      localResult: GameResult;
+    }
+  | {
+      type: "life-result";
+      ticket: CreatedTicket;
+      submit: SubmitResponse;
+    }
   | { type: "error"; message: string };
 
-const QUOTE_REFRESH_MS = 5_000;
+const QUOTE_REFRESH_MS = 8_000;
+const LIFE_OPTIONS = [1, 5, 10, 25];
 
 export function PaidGameSession({ onExit }: { onExit?: () => void }) {
   const wallet = useWallet();
   const [phase, setPhase] = useState<Phase>({ type: "idle" });
+  const [selectedLives, setSelectedLives] = useState<number>(5);
   const quotePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const setError = useCallback((message: string) => {
     setPhase({ type: "error", message });
   }, []);
 
-  // Poll the quote while we're in idle/ready states
-  const startQuotePoll = useCallback(async () => {
-    const fetchQuote = async () => {
-      try {
-        const q = await apiGet<Quote>("/api/entry/quote");
-        if (!isQuoteReady(q)) {
+  const startQuotePoll = useCallback(
+    async (lives: number) => {
+      const fetchQuote = async () => {
+        try {
+          const q = await apiGet<Quote>(`/api/entry/quote?lives=${lives}`);
+          if (!isQuoteReady(q)) {
+            setPhase((cur) =>
+              cur.type === "pick-lives" || cur.type === "quote-loading"
+                ? {
+                    type: "error",
+                    message:
+                      "Game opens once $PUMPBIRD is live on pump.fun. Hang tight — the token oracle isn't seeded yet."
+                  }
+                : cur
+            );
+            return;
+          }
           setPhase((cur) =>
-            cur.type === "ready" || cur.type === "quote-loading"
-              ? {
-                  type: "error",
-                  message:
-                    "Game opens once $PUMPBIRD is live on pump.fun. Hang tight — the token oracle isn't seeded yet."
-                }
+            cur.type === "pick-lives" || cur.type === "quote-loading"
+              ? { type: "pick-lives", quote: q }
               : cur
           );
-          return;
+        } catch (e) {
+          if (e instanceof ApiError && e.code === "price_unavailable") {
+            setPhase((cur) =>
+              cur.type === "pick-lives" || cur.type === "quote-loading"
+                ? { type: "error", message: "Price oracle is warming up. Token may not be launched yet." }
+                : cur
+            );
+          } else {
+            setPhase((cur) =>
+              cur.type === "pick-lives" || cur.type === "quote-loading"
+                ? { type: "error", message: (e as Error).message }
+                : cur
+            );
+          }
         }
-        setPhase((cur) =>
-          cur.type === "ready" || cur.type === "quote-loading"
-            ? { type: "ready", quote: q }
-            : cur
-        );
-      } catch (e) {
-        if (e instanceof ApiError && e.code === "price_unavailable") {
-          setPhase((cur) =>
-            cur.type === "ready" || cur.type === "quote-loading"
-              ? { type: "error", message: "Price oracle is warming up. Token may not be launched yet." }
-              : cur
-          );
-        } else {
-          setPhase((cur) =>
-            cur.type === "ready" || cur.type === "quote-loading"
-              ? { type: "error", message: (e as Error).message }
-              : cur
-          );
-        }
-      }
-    };
-    setPhase({ type: "quote-loading" });
-    await fetchQuote();
-    if (quotePollRef.current) clearInterval(quotePollRef.current);
-    quotePollRef.current = setInterval(fetchQuote, QUOTE_REFRESH_MS);
-  }, []);
+      };
+      setPhase({ type: "quote-loading" });
+      await fetchQuote();
+      if (quotePollRef.current) clearInterval(quotePollRef.current);
+      quotePollRef.current = setInterval(fetchQuote, QUOTE_REFRESH_MS);
+    },
+    []
+  );
 
   const stopQuotePoll = useCallback(() => {
     if (quotePollRef.current) {
@@ -176,9 +202,9 @@ export function PaidGameSession({ onExit }: { onExit?: () => void }) {
   useEffect(() => {
     if (!wallet.ready) return;
     if (phase.type === "idle" && wallet.authed) {
-      startQuotePoll();
+      startQuotePoll(selectedLives);
     }
-  }, [phase.type, startQuotePoll, wallet.authed, wallet.ready]);
+  }, [phase.type, selectedLives, startQuotePoll, wallet.authed, wallet.ready]);
 
   const handleConnect = useCallback(async () => {
     try {
@@ -188,30 +214,44 @@ export function PaidGameSession({ onExit }: { onExit?: () => void }) {
       }
       setPhase({ type: "signing-in" });
       await wallet.signIn();
-      await startQuotePoll();
+      await startQuotePoll(selectedLives);
     } catch (e) {
       setError((e as Error).message ?? "Sign-in failed");
     }
-  }, [setError, startQuotePoll, wallet]);
+  }, [selectedLives, setError, startQuotePoll, wallet]);
+
+  // Recompute quote when lives selection changes
+  const handleSelectLives = useCallback(
+    (lives: number) => {
+      setSelectedLives(lives);
+      if (wallet.authed) {
+        startQuotePoll(lives);
+      }
+    },
+    [startQuotePoll, wallet.authed]
+  );
 
   const handlePay = useCallback(async () => {
-    if (phase.type !== "ready") return;
+    if (phase.type !== "pick-lives") return;
     if (!wallet.wallet) {
       await handleConnect();
       return;
     }
     stopQuotePoll();
-    setPhase({ type: "creating-ticket" });
+    const lives = selectedLives;
+    setPhase({ type: "creating-ticket", lives });
     let created: CreatedTicket;
     try {
-      created = await apiPost<CreatedTicket>("/api/entry/create", { variant: "custom" });
+      created = await apiPost<CreatedTicket>("/api/entry/create", {
+        variant: "custom",
+        lives
+      });
     } catch (e) {
       setError(`Could not create entry ticket: ${(e as Error).message}`);
       return;
     }
     setPhase({ type: "paying", ticket: created });
 
-    // Build + send tx
     let signature: string;
     try {
       const tx = buildEntryTransaction({
@@ -229,7 +269,6 @@ export function PaidGameSession({ onExit }: { onExit?: () => void }) {
     }
     setPhase({ type: "confirming", ticket: created, signature });
 
-    // Confirm with the backend — retries up to 20s in case Helius is a beat behind
     const start = Date.now();
     let confirmed = false;
     let lastErr = "";
@@ -242,7 +281,6 @@ export function PaidGameSession({ onExit }: { onExit?: () => void }) {
         confirmed = true;
       } catch (e) {
         if (e instanceof ApiError) {
-          // Retry on transient "transaction_not_found" etc
           if (
             e.code === "payment_invalid" &&
             typeof e.details === "object" &&
@@ -265,20 +303,21 @@ export function PaidGameSession({ onExit }: { onExit?: () => void }) {
       setError(`Could not confirm payment: ${lastErr || "timeout"}. Refresh to try again.`);
       return;
     }
-    setPhase({ type: "playing", ticket: created });
-  }, [handleConnect, phase, setError, stopQuotePoll, wallet]);
+    setPhase({ type: "in-game", ticket: created, lifeIndex: 0, autoStart: false });
+  }, [handleConnect, phase.type, selectedLives, setError, stopQuotePoll, wallet]);
 
   const handleGameComplete = useCallback(
     async (result: GameResult) => {
-      if (phase.type !== "playing") return;
-      const ticket = phase.ticket;
-      setPhase({ type: "submitting", ticket, localResult: result });
+      if (phase.type !== "in-game") return;
+      const { ticket, lifeIndex } = phase;
+      setPhase({ type: "submitting-life", ticket, lifeIndex, localResult: result });
       try {
         const res = await apiPost<SubmitResponse>("/api/score/submit", {
           ticketId: ticket.ticket.id,
-          taps: result.taps
+          taps: result.taps,
+          lifeIndex
         });
-        setPhase({ type: "result", ticket, submit: res });
+        setPhase({ type: "life-result", ticket, submit: res });
       } catch (e) {
         setError(`Could not submit score: ${(e as Error).message}`);
       }
@@ -286,21 +325,36 @@ export function PaidGameSession({ onExit }: { onExit?: () => void }) {
     [phase, setError]
   );
 
-  const handleAgain = useCallback(async () => {
-    setPhase({ type: "idle" });
-    await startQuotePoll();
-  }, [startQuotePoll]);
+  // After a life ends and is submitted, "next life" mounts the game again
+  // with the next life's seed. Auto-starts so the user doesn't have to tap
+  // through a start screen between lives.
+  const handleNextLife = useCallback(() => {
+    if (phase.type !== "life-result") return;
+    if (phase.submit.lastLife) return;
+    const nextLifeIndex = phase.submit.lifeIndex + 1;
+    setPhase({
+      type: "in-game",
+      ticket: phase.ticket,
+      lifeIndex: nextLifeIndex,
+      autoStart: true
+    });
+  }, [phase]);
 
-  // ─────────────────────────────────────────────────────────
-  // Render
-  // ─────────────────────────────────────────────────────────
-  if (phase.type === "playing") {
+  const handleBuyMore = useCallback(async () => {
+    stopQuotePoll();
+    await startQuotePoll(selectedLives);
+  }, [selectedLives, startQuotePoll, stopQuotePoll]);
+
+  // ─── Render ───
+  if (phase.type === "in-game") {
+    const lifeSeed = seedForLife(phase.ticket.ticket.seed, phase.lifeIndex);
     return (
       <PumpBirdGame
-        key={phase.ticket.ticket.id}
+        key={`${phase.ticket.ticket.id}:${phase.lifeIndex}`}
         mode="paid"
-        seed={phase.ticket.ticket.seed}
+        seed={lifeSeed}
         variant={phase.ticket.ticket.variant}
+        autoStart={phase.autoStart}
         onComplete={handleGameComplete}
         onExit={onExit}
       />
@@ -313,29 +367,44 @@ export function PaidGameSession({ onExit }: { onExit?: () => void }) {
         {!wallet.authed ? (
           <ConnectPanel
             installed={wallet.installed}
-            busy={phase.type === "connecting" || phase.type === "signing-in"}
+            busy={phase.type === "signing-in"}
             onConnect={handleConnect}
           />
         ) : phase.type === "quote-loading" ? (
           <Loading text="Fetching $PUMPBIRD price…" />
-        ) : phase.type === "ready" ? (
-          <ReadyPanel quote={phase.quote} onPay={handlePay} onExit={onExit} />
+        ) : phase.type === "pick-lives" ? (
+          <PickLivesPanel
+            quote={phase.quote}
+            selectedLives={selectedLives}
+            onSelectLives={handleSelectLives}
+            onPay={handlePay}
+            onExit={onExit}
+          />
         ) : phase.type === "creating-ticket" ? (
-          <Loading text="Locking in your $1 quote…" />
+          <Loading text={`Locking in your ${phase.lives}-life pack…`} />
         ) : phase.type === "paying" ? (
           <Loading text="Sign the transaction in Phantom…" />
         ) : phase.type === "confirming" ? (
           <Loading text="Confirming on Solana…" sub={`sig: ${phase.signature.slice(0, 10)}…`} />
-        ) : phase.type === "submitting" ? (
-          <Loading text="Submitting your score…" sub={`local: ${phase.localResult.score}`} />
-        ) : phase.type === "result" ? (
-          <ResultPanel res={phase.submit} onAgain={handleAgain} onExit={onExit} />
+        ) : phase.type === "submitting-life" ? (
+          <Loading
+            text={`Submitting score for life ${phase.lifeIndex + 1}…`}
+            sub={`local: ${phase.localResult.score}`}
+          />
+        ) : phase.type === "life-result" ? (
+          <LifeResultPanel
+            res={phase.submit}
+            ticketLivesTotal={phase.ticket.ticket.lives}
+            onNextLife={handleNextLife}
+            onBuyMore={handleBuyMore}
+            onExit={onExit}
+          />
         ) : phase.type === "error" ? (
           <ErrorPanel
             message={phase.message}
             onRetry={() => {
               setPhase({ type: "idle" });
-              startQuotePoll();
+              startQuotePoll(selectedLives);
             }}
             onExit={onExit}
           />
@@ -357,7 +426,8 @@ const shellStyle: React.CSSProperties = {
   background: "#030a03",
   fontFamily: "'Oxanium', 'Rajdhani', system-ui, sans-serif",
   color: "#d9ffd6",
-  padding: 24
+  padding: 24,
+  overflow: "auto"
 };
 
 const cardStyle: React.CSSProperties = {
@@ -366,7 +436,7 @@ const cardStyle: React.CSSProperties = {
   border: "2px solid rgba(0,255,65,0.4)",
   background: "rgba(7,18,7,0.85)",
   boxShadow: "0 0 28px rgba(0,255,65,0.25), 0 0 80px rgba(0,255,65,0.08)",
-  padding: 28,
+  padding: 24,
   borderRadius: 6,
   textAlign: "center"
 };
@@ -385,7 +455,7 @@ function ConnectPanel({
       <h2 style={h2Style}>Pump.Bird</h2>
       <p style={bodyStyle}>
         {installed
-          ? "Connect your wallet to play for $1 worth of $PUMPBIRD."
+          ? "Connect your wallet to buy a pack of lives in $PUMPBIRD."
           : "Phantom wallet required."}
       </p>
       <button type="button" disabled={busy} onClick={onConnect} style={primaryBtnStyle}>
@@ -398,40 +468,79 @@ function ConnectPanel({
   );
 }
 
-function ReadyPanel({
+function PickLivesPanel({
   quote,
+  selectedLives,
+  onSelectLives,
   onPay,
   onExit
 }: {
   quote: Quote;
+  selectedLives: number;
+  onSelectLives: (n: number) => void;
   onPay: () => void;
   onExit?: () => void;
 }) {
-  const target = quote.amount?.display?.target;
-  const tokenAmount = typeof target === "number" ? formatNumber(target) : "—";
+  const targetDisplay = quote.amount?.display?.target;
   const tokenUsd = quote.tokenUsd;
-  const slippageBps = quote.slippageBps ?? 300;
-  const ttlMs = quote.ttlMs ?? 10_000;
+  const totalUsd =
+    typeof quote.entryUsdCents === "number" ? quote.entryUsdCents / 100 : selectedLives;
   return (
     <>
-      <h2 style={h2Style}>Ready to Play</h2>
+      <h2 style={h2Style}>Pick Your Pack</h2>
+      <p style={{ ...metaStyle, marginBottom: 14 }}>
+        ONE transaction. The pot grows with every play.
+      </p>
+      <div style={livesGridStyle}>
+        {LIFE_OPTIONS.map((n) => {
+          const active = n === selectedLives;
+          return (
+            <button
+              key={n}
+              type="button"
+              onClick={() => onSelectLives(n)}
+              style={{ ...livesBtnStyle, ...(active ? livesBtnActiveStyle : {}) }}
+            >
+              <span style={{ fontSize: 22, fontFamily: "'Press Start 2P', monospace" }}>
+                {n}
+              </span>
+              <span style={{ fontSize: 9, opacity: 0.7, marginTop: 4 }}>
+                {n === 1 ? "LIFE" : "LIVES"}
+              </span>
+              <span
+                style={{
+                  fontSize: 10,
+                  marginTop: 6,
+                  color: active ? "#65ff48" : "#d9ffd6",
+                  fontWeight: 700
+                }}
+              >
+                ${(n * 1).toFixed(0)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
       <div style={priceBoxStyle}>
         <div style={{ fontSize: 11, color: "#ff2d78", letterSpacing: 1, marginBottom: 4 }}>
-          ENTRY
+          TOTAL
         </div>
-        <div style={{ fontSize: 22, color: "#00ff41", letterSpacing: 2 }}>$1.00 USD</div>
+        <div style={{ fontSize: 26, color: "#00ff41", letterSpacing: 2 }}>
+          ${totalUsd.toFixed(2)} USD
+        </div>
         <div style={{ fontSize: 14, color: "#d9ffd6", marginTop: 8 }}>
-          = <strong style={{ color: "#00ff41" }}>{tokenAmount}</strong> $PUMPBIRD
+          = <strong style={{ color: "#00ff41" }}>
+            {typeof targetDisplay === "number" ? formatNumber(targetDisplay) : "—"}
+          </strong>{" "}
+          $PUMPBIRD
         </div>
-        <div style={{ fontSize: 9, color: "rgba(217,255,214,0.6)", marginTop: 8 }}>
-          @ ${typeof tokenUsd === "number" ? formatPrice(tokenUsd) : "—"} / token · source: {quote.priceSource ?? "—"}
-        </div>
-        <div style={{ fontSize: 9, color: "rgba(217,255,214,0.6)", marginTop: 4 }}>
-          slippage ±{(slippageBps / 100).toFixed(1)}% · quote refresh {Math.round(ttlMs / 1000)}s
+        <div style={{ fontSize: 9, color: "rgba(217,255,214,0.55)", marginTop: 8 }}>
+          @ ${typeof tokenUsd === "number" ? formatPrice(tokenUsd) : "—"} / token · source:{" "}
+          {quote.priceSource ?? "—"}
         </div>
       </div>
       <button type="button" onClick={onPay} style={primaryBtnStyle}>
-        ▶ Pay &amp; Play
+        ▶ Pay &amp; Play {selectedLives} {selectedLives === 1 ? "Game" : "Games"}
       </button>
       <p style={metaStyle}>
         75% of every entry feeds the pot. 25% goes to the buyback &amp; burn treasury.
@@ -460,13 +569,17 @@ function Loading({ text, sub }: { text: string; sub?: string }) {
   );
 }
 
-function ResultPanel({
+function LifeResultPanel({
   res,
-  onAgain,
+  ticketLivesTotal,
+  onNextLife,
+  onBuyMore,
   onExit
 }: {
   res: SubmitResponse;
-  onAgain: () => void;
+  ticketLivesTotal: number;
+  onNextLife: () => void;
+  onBuyMore: () => void;
   onExit?: () => void;
 }) {
   const won =
@@ -474,9 +587,25 @@ function ResultPanel({
     Number(res.settlement.payoutTokenAmount) > 0;
   return (
     <>
-      <h2 style={h2Style}>{won ? "🏆 You Took the Pot!" : "REKT"}</h2>
-      <div style={{ fontSize: 38, color: "#00ff41", margin: "12px 0", letterSpacing: 4 }}>
+      <h2 style={h2Style}>
+        {won
+          ? "🏆 You Took the Pot!"
+          : res.lastLife
+          ? "Last Life Spent"
+          : "Life Ended"}
+      </h2>
+      <div style={{ fontSize: 38, color: "#00ff41", margin: "8px 0", letterSpacing: 4 }}>
         {String(res.score).padStart(3, "0")}
+      </div>
+      <div
+        style={{
+          fontSize: 10,
+          color: res.lastLife ? "#ff2d78" : "#d9ffd6",
+          letterSpacing: 2,
+          marginBottom: 18
+        }}
+      >
+        LIFE {res.lifeIndex + 1} / {ticketLivesTotal} · {res.livesRemaining} LEFT
       </div>
       {won && res.settlement?.kind === "settled" && (
         <div style={priceBoxStyle}>
@@ -498,12 +627,15 @@ function ResultPanel({
           )}
         </div>
       )}
-      {!won && (
-        <p style={metaStyle}>Score recorded. Your best updates if it&#39;s your personal high.</p>
+      {!res.lastLife ? (
+        <button type="button" onClick={onNextLife} style={primaryBtnStyle}>
+          ▶ Next Life ({res.livesRemaining} left)
+        </button>
+      ) : (
+        <button type="button" onClick={onBuyMore} style={primaryBtnStyle}>
+          ↺ Buy Another Pack
+        </button>
       )}
-      <button type="button" onClick={onAgain} style={primaryBtnStyle}>
-        ↺ Play Again
-      </button>
       {onExit && (
         <button type="button" onClick={onExit} style={ghostBtnStyle}>
           ◂ Done
@@ -542,9 +674,9 @@ const h2Style: React.CSSProperties = {
   fontFamily: "'Press Start 2P', monospace",
   color: "#00ff41",
   textShadow: "0 0 10px #00ff41, 0 0 20px #00ff41",
-  fontSize: 22,
+  fontSize: 20,
   letterSpacing: 3,
-  margin: "0 0 16px"
+  margin: "0 0 14px"
 };
 
 const bodyStyle: React.CSSProperties = {
@@ -592,6 +724,34 @@ const ghostBtnStyle: React.CSSProperties = {
   marginTop: 12,
   width: "100%",
   cursor: "pointer"
+};
+
+const livesGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(4, 1fr)",
+  gap: 8,
+  marginBottom: 16
+};
+
+const livesBtnStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "14px 8px",
+  background: "rgba(8, 10, 7, 0.7)",
+  border: "2px solid rgba(217,255,214,0.18)",
+  color: "#d9ffd6",
+  fontFamily: "'Rajdhani', sans-serif",
+  cursor: "pointer",
+  borderRadius: 4,
+  letterSpacing: 1
+};
+
+const livesBtnActiveStyle: React.CSSProperties = {
+  borderColor: "#00ff41",
+  background: "rgba(0,255,65,0.12)",
+  boxShadow: "0 0 16px rgba(0,255,65,0.4)"
 };
 
 function formatNumber(n: number): string {

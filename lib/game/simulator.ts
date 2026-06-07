@@ -330,6 +330,14 @@ export function normalizeTaps(taps: number[], maxTick: number): number[] {
   ).sort((a, b) => a - b);
 }
 
+// Multi-life seed derivation. Each life inside a paid-pack ticket gets a
+// distinct deterministic seed so the pipe sequence is different every game.
+// Server-side replay reproduces the same sequence given (ticketSeed, lifeIndex).
+export function seedForLife(ticketSeed: string, lifeIndex: number): string {
+  if (!lifeIndex) return ticketSeed;
+  return `${ticketSeed}#life-${lifeIndex}`;
+}
+
 export function hashTapLog(
   variant: VariantId,
   seed: string,

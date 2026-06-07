@@ -12,8 +12,13 @@ import {
   getTreasuryAta
 } from "@/lib/solana/treasury";
 
+const MAX_LIVES = Number.parseInt(process.env.MAX_LIVES_PER_TICKET ?? "100", 10);
+
 const Body = z.object({
-  variant: z.enum(["forked", "custom"]).default("custom")
+  variant: z.enum(["forked", "custom"]).default("custom"),
+  // Number of plays included in this single payment. 1..100.
+  // Total payment = lives × per-life $1 worth of PUMPBIRD.
+  lives: z.number().int().min(1).max(MAX_LIVES).default(1)
 });
 
 const TICKET_TTL_MIN = 15;
@@ -31,6 +36,7 @@ export const POST = route(
     const wallet = ctx.session!.sub;
     const parsed = Body.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) return bad("invalid_body", parsed.error.message);
+    const { variant, lives } = parsed.data;
 
     let treasury: string;
     let treasuryAta: string;
@@ -50,15 +56,16 @@ export const POST = route(
       return err(503, "price_unavailable", price.reason);
     }
 
-    const entryCents = Number.parseInt(process.env.ENTRY_USD_CENTS ?? "100", 10);
-    const targetRaw = price.rawForUsdCents(entryCents);
+    const perLifeCents = Number.parseInt(process.env.ENTRY_USD_CENTS ?? "100", 10);
+    const totalCents = perLifeCents * lives;
+    const targetRaw = price.rawForUsdCents(totalCents);
     const slippage = (targetRaw * BigInt(SLIPPAGE_BPS)) / 10_000n;
     const minRaw = targetRaw - slippage;
     const maxRaw = targetRaw + slippage;
 
     const id = nanoid(24);
     const memo = `bp:${nanoid(12)}`;
-    const seed = `${parsed.data.variant}:${wallet.slice(0, 8)}:${id}:${Date.now()}`;
+    const seed = `${variant}:${wallet.slice(0, 8)}:${id}:${Date.now()}`;
     const now = new Date();
     const quoteExpiresAt = new Date(now.getTime() + QUOTE_TTL_MS);
     const ticketExpiresAt = new Date(now.getTime() + TICKET_TTL_MIN * 60 * 1000);
@@ -71,10 +78,10 @@ export const POST = route(
     await db.insert(tickets).values({
       id,
       wallet,
-      variant: parsed.data.variant,
+      variant,
       seed,
       memo,
-      entryUsdCents: entryCents,
+      entryUsdCents: totalCents,
       entryTokenAmount: targetRaw,
       minTokenAmount: minRaw,
       maxTokenAmount: maxRaw,
@@ -82,17 +89,21 @@ export const POST = route(
       quoteExpiresAt,
       status: "pending",
       expiresAt: ticketExpiresAt,
+      livesTotal: lives,
+      livesUsed: 0,
       createdAt: now
     });
 
     return ok({
       ticket: {
         id,
-        variant: parsed.data.variant,
+        variant,
         seed,
         memo,
         status: "pending",
-        entryUsdCents: entryCents,
+        entryUsdCents: totalCents,
+        perLifeUsdCents: perLifeCents,
+        lives,
         tokenUsd: price.tokenUsd,
         quoteExpiresAt: quoteExpiresAt.toISOString(),
         ticketExpiresAt: ticketExpiresAt.toISOString()
