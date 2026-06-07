@@ -348,7 +348,19 @@ export function PumpBirdGame({
     void w;
   }, [variant]);
 
-  // Resize handler
+  // Resize handler.
+  //
+  // The DISPLAY size of the wrap div is computed from the container so the
+  // game visually fits the cabinet on every viewport. But the CANVAS BACKING
+  // BUFFER is locked at config.width × config.height (480 × 853) — the same
+  // coord space the simulator uses. We let CSS scale the buffer to the wrap
+  // div's display size, which means:
+  //   * physics renders at the same px coords on every device
+  //   * the bird is always at the same proportional position
+  //   * pipes spawn from the same x and arrive at the bird's x on the same
+  //     tick on every device
+  //   * what changes per-device is just the CSS scale factor
+  const cfg = getVariantConfig(variant);
   useEffect(() => {
     function onResize() {
       const { w, h } = computeSize();
@@ -356,18 +368,18 @@ export function PumpBirdGame({
       setSize({ w, h });
       const game = gameCanvasRef.current;
       if (game) {
-        game.width = w;
-        game.height = h;
+        game.width = cfg.width;
+        game.height = cfg.height;
         const gctx = game.getContext("2d");
         if (gctx) gctx.imageSmoothingEnabled = false;
       }
-      renderBg(w, h);
-      buildPipeSprite(w, h);
+      renderBg(cfg.width, cfg.height);
+      buildPipeSprite(cfg.width, cfg.height);
     }
     onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [computeSize, renderBg, buildPipeSprite]);
+  }, [computeSize, renderBg, buildPipeSprite, cfg.width, cfg.height]);
 
   // Spawn flap particles
   const spawnFlap = useCallback((x: number, y: number) => {
@@ -496,14 +508,18 @@ export function PumpBirdGame({
       if (!game) return;
       const ctx = game.getContext("2d");
       if (!ctx) return;
-      const { w, h } = sizeRef.current;
-      if (w === 0 || h === 0) return;
+      // Wait for the display layout to settle so we don't draw into a 0-sized
+      // wrap div. Canvas backing buffer is config-sized; CSS scales for display.
+      if (sizeRef.current.w === 0) return;
+      const config = getVariantConfig(variant);
+      // Render in CONFIG coords (480 x 853). CSS scales the buffer to display.
+      const w = config.width;
+      const h = config.height;
 
       // Fixed timestep
       const last = lastFrameRef.current || now;
       const dt = Math.min(now - last, 100);
       lastFrameRef.current = now;
-      const config = getVariantConfig(variant);
 
       if (phaseRef.current === "playing") {
         accumulatorRef.current += dt;
@@ -836,7 +852,10 @@ export function PumpBirdGame({
           </div>
         )}
 
-        {/* Game-over screen */}
+        {/* Game-over screen.
+            pointer-events: none on the overlay so a tap anywhere on the canvas
+            beneath fires onPointerDown → onRestart (when provided). The
+            buttons re-enable pointer-events to stay clickable. */}
         {phase === "dead" && (
           <div
             style={{
@@ -849,7 +868,8 @@ export function PumpBirdGame({
               justifyContent: "center",
               fontFamily: "'Press Start 2P', monospace",
               padding: 20,
-              textAlign: "center"
+              textAlign: "center",
+              pointerEvents: onRestart ? "none" : "auto"
             }}
           >
             <div
@@ -885,7 +905,7 @@ export function PumpBirdGame({
             {onRestart && (
               <button
                 type="button"
-                onClick={onRestart}
+                onClick={(e) => { e.stopPropagation(); onRestart(); }}
                 style={{
                   fontFamily: "'Press Start 2P', monospace",
                   fontSize: 12,
@@ -896,7 +916,8 @@ export function PumpBirdGame({
                   padding: "14px 28px",
                   letterSpacing: 2,
                   cursor: "pointer",
-                  marginBottom: 8
+                  marginBottom: 8,
+                  pointerEvents: "auto"
                 }}
               >
                 ↺ TAP TO PLAY AGAIN
@@ -917,7 +938,7 @@ export function PumpBirdGame({
             {onExit && (
               <button
                 type="button"
-                onClick={onExit}
+                onClick={(e) => { e.stopPropagation(); onExit(); }}
                 style={{
                   fontFamily: "'Press Start 2P', monospace",
                   fontSize: 11,
@@ -927,7 +948,8 @@ export function PumpBirdGame({
                   textShadow: "0 0 8px #00ff41",
                   padding: "12px 24px",
                   letterSpacing: 2,
-                  cursor: "pointer"
+                  cursor: "pointer",
+                  pointerEvents: "auto"
                 }}
               >
                 ◂ EXIT

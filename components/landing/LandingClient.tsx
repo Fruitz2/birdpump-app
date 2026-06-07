@@ -330,6 +330,30 @@ export function LandingClient() {
             <a href="#leaderboard" className={activeSection === "leaderboard" ? "active" : ""}>Leaderboard</a>
             <a href="#how" className={activeSection === "how" ? "active" : ""}>How It Works</a>
             <a href="#faq" className={activeSection === "faq" ? "active" : ""}>FAQ</a>
+            <a
+              href="https://x.com/pumpbirdfun"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="PUMP.BIRD on X"
+              className="nav-social"
+              title="X (Twitter)"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231ZM17.083 19.77h1.833L7.084 4.126H5.117Z"/>
+              </svg>
+            </a>
+            <a
+              href="https://t.me/pumpbird"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="PUMP.BIRD on Telegram"
+              className="nav-social"
+              title="Telegram"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="currentColor" d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.24 3.64 11.94c-.88-.27-.89-.88.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.92-.74 1.14-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/>
+              </svg>
+            </a>
           </nav>
           <div className="header-actions">
             <button
@@ -740,9 +764,12 @@ export function LandingClient() {
           <footer className="footer-bar">
             <Image className="flogo" src={`${BASE_ASSETS}logo.png`} alt="PUMP.BIRD" width={120} height={32} unoptimized />
             <nav className="footer-links" aria-label="Footer">
-              <a href="#faq">FAQ</a><a href="#faq">Terms</a><a href="#faq">Privacy</a>
-              <button type="button" onClick={() => showToast("X account drops at launch.")} className="footer-link-btn">X (Twitter)</button>
-              <button type="button" onClick={() => showToast("Telegram drops at launch.")} className="footer-link-btn">Telegram</button>
+              <a href="#faq">FAQ</a>
+              <a href="#faq">Terms</a>
+              <a href="#faq">Privacy</a>
+              <a href="https://x.com/pumpbirdfun" target="_blank" rel="noopener noreferrer">X (Twitter)</a>
+              <a href="https://t.me/pumpbird" target="_blank" rel="noopener noreferrer">Telegram</a>
+              <a href="/counter">Live Counter</a>
             </nav>
             <span className="footer-copy">© 2026 Pump.Bird. All rights reserved.</span>
           </footer>
@@ -765,6 +792,8 @@ export function LandingClient() {
             <a href="#faq" onClick={() => setDrawerOpen(false)}>FAQ</a>
             <button type="button" className="drawer-cta" onClick={() => { setDrawerOpen(false); handlePlayFun(); }}>Play For Fun</button>
             <Link href="/counter" onClick={() => setDrawerOpen(false)}>Live Counter</Link>
+            <a href="https://x.com/pumpbirdfun" target="_blank" rel="noopener noreferrer" onClick={() => setDrawerOpen(false)}>X (Twitter) ↗</a>
+            <a href="https://t.me/pumpbird" target="_blank" rel="noopener noreferrer" onClick={() => setDrawerOpen(false)}>Telegram ↗</a>
           </nav>
           <div className="drawer-pot">
             <span className="label">Current Pot</span>
