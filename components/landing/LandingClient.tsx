@@ -345,7 +345,7 @@ export function LandingClient() {
             <a href="#how" className={activeSection === "how" ? "active" : ""}>How It Works</a>
             <a href="#faq" className={activeSection === "faq" ? "active" : ""}>FAQ</a>
             <a
-              href="https://x.com/pumpbirdfun"
+              href="https://x.com/PumpBirdonSol"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="PUMP.BIRD on X"
@@ -799,7 +799,7 @@ export function LandingClient() {
               <a href="#faq">FAQ</a>
               <a href="#faq">Terms</a>
               <a href="#faq">Privacy</a>
-              <a href="https://x.com/pumpbirdfun" target="_blank" rel="noopener noreferrer">X (Twitter)</a>
+              <a href="https://x.com/PumpBirdonSol" target="_blank" rel="noopener noreferrer">X (Twitter)</a>
               <a href="https://t.me/pumpbird" target="_blank" rel="noopener noreferrer">Telegram</a>
               <a href="/counter">Live Counter</a>
             </nav>
@@ -824,7 +824,7 @@ export function LandingClient() {
             <a href="#faq" onClick={() => setDrawerOpen(false)}>FAQ</a>
             <button type="button" className="drawer-cta" onClick={() => { setDrawerOpen(false); handlePlayFun(); }}>Play For Fun</button>
             <Link href="/counter" onClick={() => setDrawerOpen(false)}>Live Counter</Link>
-            <a href="https://x.com/pumpbirdfun" target="_blank" rel="noopener noreferrer" onClick={() => setDrawerOpen(false)}>X (Twitter) ↗</a>
+            <a href="https://x.com/PumpBirdonSol" target="_blank" rel="noopener noreferrer" onClick={() => setDrawerOpen(false)}>X (Twitter) ↗</a>
             <a href="https://t.me/pumpbird" target="_blank" rel="noopener noreferrer" onClick={() => setDrawerOpen(false)}>Telegram ↗</a>
           </nav>
           <div className="drawer-pot">

@@ -3,9 +3,9 @@ import "./globals.css";
 import { WalletProvider } from "@/components/wallet/WalletProvider";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://birdpump-app.vercel.app";
-const TITLE = "PUMP.BIRD — The Highscore Takes the Pot.";
+const TITLE = "PUMP.BIRD · The Highscore Takes the Pot.";
 const DESCRIPTION =
-  "Pay $1 in $PUMPBIRD, play the game, beat the highscore — win the entire pot. Built on pump.fun, on Solana.";
+  "Pay $1 in $PUMPBIRD, play the game, beat the highscore, win the entire pot. Built on pump.fun, on Solana.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
@@ -14,6 +14,7 @@ export const metadata: Metadata = {
     template: "%s · PUMP.BIRD"
   },
   description: DESCRIPTION,
+  alternates: { canonical: "/" },
   applicationName: "PUMP.BIRD",
   keywords: [
     "pumpbird",
@@ -40,19 +41,17 @@ export const metadata: Metadata = {
     // images: handled automatically by app/opengraph-image.png
   },
   twitter: {
+    site: "@PumpBirdonSol",
+    creator: "@PumpBirdonSol",
     card: "summary_large_image",
     title: TITLE,
     description: DESCRIPTION,
-    creator: "@pumpbird"
-    // images: handled automatically by app/twitter-image.png
+    // images: handled automatically by app/twitter-image.jpg
   },
   robots: {
     index: true,
     follow: true,
     googleBot: { index: true, follow: true, "max-image-preview": "large" }
-  },
-  other: {
-    "telegram:channel": "@pumpbird"
   }
 };
 
