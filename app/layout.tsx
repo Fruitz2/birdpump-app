@@ -52,6 +52,14 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
     googleBot: { index: true, follow: true, "max-image-preview": "large" }
+  },
+  other: {
+    /* Restored. This tag was removed on 2026-08-23 on the grounds that no
+       channel existed, which was wrong: the probe tested whether t.me
+       returned 200, and t.me always returns 200. Reading the channel back
+       shows "PumpBird - Portal" with subscribers. The handle here matches
+       the three links already in the landing page. */
+    "telegram:channel": "@pumpbird"
   }
 };
 
