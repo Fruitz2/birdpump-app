@@ -196,6 +196,47 @@ class GameAudio {
 }
 const sharedAudio = new GameAudio();
 
+// ────────────────────────────────────────────────────────────
+// Global sound preference. One source of truth (localStorage) so
+// the landing-page header toggle, the in-game button and the M key
+// all drive the SAME audio engine and stay in sync via a window
+// event. Everything is guarded for SSR.
+// ────────────────────────────────────────────────────────────
+export const SOUND_PREF_KEY = "pumpBirdSound";
+export const SOUND_EVENT = "pumpbird:sound";
+
+export function readSoundPref(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const stored = window.localStorage.getItem(SOUND_PREF_KEY);
+    return stored === null ? true : stored === "1";
+  } catch {
+    return true;
+  }
+}
+
+export function setGlobalSound(on: boolean): void {
+  sharedAudio.setEnabled(on);
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SOUND_PREF_KEY, on ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+  try {
+    window.dispatchEvent(new CustomEvent(SOUND_EVENT, { detail: { on } }));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Toggle from the persisted value; returns the new state. */
+export function toggleGlobalSound(): boolean {
+  const next = !readSoundPref();
+  setGlobalSound(next);
+  return next;
+}
+
 const PARTICLE_POOL = 200;
 const IDLE_SPRITE_URL = "/assets/game/pump-bird-idle.png";
 const DEAD_SPRITE_URL = "/assets/game/pump-bird-dead.png";
@@ -227,24 +268,22 @@ export function PumpBirdGame({
   // Size lives in state so the wrap div re-renders with correct dimensions
   // once we measure the viewport. (Initial render before measurement has w=0.)
   const [size, setSize] = useState({ w: 0, h: 0 });
-  // Sound on/off — persists across sessions via localStorage
-  const [soundOn, setSoundOn] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
-    try {
-      const stored = window.localStorage.getItem("pumpBirdSound");
-      return stored === null ? true : stored === "1";
-    } catch {
-      return true;
-    }
-  });
+  // Sound on/off — persists across sessions via localStorage. The pref is
+  // global (see readSoundPref/setGlobalSound above); this state only mirrors
+  // it so the button glyph re-renders. All toggles go through
+  // toggleGlobalSound so the landing header button stays in sync.
+  const [soundOn, setSoundOn] = useState<boolean>(() => readSoundPref());
   useEffect(() => {
     sharedAudio.setEnabled(soundOn);
-    try {
-      window.localStorage.setItem("pumpBirdSound", soundOn ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
   }, [soundOn]);
+  useEffect(() => {
+    const onSound = (e: Event) => {
+      const on = (e as CustomEvent<{ on: boolean }>).detail?.on;
+      if (typeof on === "boolean") setSoundOn(on);
+    };
+    window.addEventListener(SOUND_EVENT, onSound);
+    return () => window.removeEventListener(SOUND_EVENT, onSound);
+  }, []);
   const sizeRef = useRef({ w: 0, h: 0 });
   const idleSpriteRef = useRef<HTMLImageElement | HTMLCanvasElement | null>(null);
   const deadSpriteRef = useRef<HTMLImageElement | HTMLCanvasElement | null>(null);
@@ -671,7 +710,7 @@ export function PumpBirdGame({
       } else if (e.code === "KeyM") {
         e.preventDefault();
         sharedAudio.resume();
-        setSoundOn((v) => !v);
+        toggleGlobalSound();
       } else if (e.code === "Escape" && onExit) {
         onExit();
       }
@@ -936,7 +975,7 @@ export function PumpBirdGame({
           onClick={(e) => {
             e.stopPropagation();
             sharedAudio.resume();
-            setSoundOn((v) => !v);
+            toggleGlobalSound();
           }}
           aria-label={soundOn ? "Mute sound" : "Unmute sound"}
           title={soundOn ? "Mute (M)" : "Unmute (M)"}

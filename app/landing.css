@@ -60,6 +60,8 @@ ul{list-style:none}
   mix-blend-mode:screen}
 
 .container{width:100%;max-width:var(--maxw);margin-inline:auto;padding-inline:var(--pad)}
+/* anchor jumps land clear of the 68px sticky header */
+section[id]{scroll-margin-top:76px}
 
 /* ============================================================
    ARCADE FRAME SYSTEM  (the signature visual language)
@@ -131,7 +133,7 @@ ul{list-style:none}
 .nav-desktop a.active::after{content:"";position:absolute;left:0;right:0;bottom:-2px;height:2px;
   background:var(--green);box-shadow:0 0 10px rgba(145,255,0,.9)}
 .nav-desktop a.nav-social{display:inline-flex;align-items:center;justify-content:center;
-  width:34px;height:34px;color:rgba(255,255,255,.65);padding:0;border-radius:50%;
+  width:38px;height:38px;color:rgba(255,255,255,.65);padding:0;border-radius:50%;
   border:1px solid rgba(255,255,255,.1);transition:color .2s,border-color .2s,background .2s}
 .nav-desktop a.nav-social:hover{color:var(--green);border-color:var(--green);
   background:rgba(145,255,0,.08);box-shadow:0 0 14px rgba(145,255,0,.35)}
@@ -139,19 +141,20 @@ ul{list-style:none}
 .header-actions{display:flex;align-items:center;gap:.6rem}
 .btn-wallet{display:inline-flex;align-items:center;gap:.5em;font-weight:700;letter-spacing:.08em;
   text-transform:uppercase;font-size:.8rem;padding:.7em 1.05em;color:var(--green);
+  white-space:nowrap;min-height:44px;
   border:2px solid var(--green);background:linear-gradient(180deg,#0d1615,#070d0c);
   clip-path:polygon(8px 0,100% 0,calc(100% - 8px) 100%,0 100%);
   box-shadow:0 0 12px rgba(145,255,0,.3);transition:box-shadow .25s,background .2s}
 .btn-wallet:hover{box-shadow:0 0 20px rgba(145,255,0,.6)}
 .btn-wallet.connected{color:var(--white);border-color:var(--pink);box-shadow:0 0 14px rgba(255,47,155,.4)}
 .btn-wallet .led{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
-.btn-icon{width:40px;height:40px;display:inline-flex;align-items:center;justify-content:center;
+.btn-icon{width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;
   color:var(--green);border:2px solid var(--green);background:linear-gradient(180deg,#0d1615,#070d0c);
   clip-path:polygon(7px 0,100% 0,calc(100% - 7px) 100%,0 100%);font-size:1.05rem;
   box-shadow:0 0 12px rgba(145,255,0,.28);transition:box-shadow .25s}
 .btn-icon:hover{box-shadow:0 0 20px rgba(145,255,0,.55)}
 .btn-icon.playing{color:var(--pink);border-color:var(--pink);box-shadow:0 0 16px rgba(255,47,155,.5)}
-.hamburger{display:none;width:42px;height:42px;border:2px solid var(--green);align-items:center;justify-content:center;
+.hamburger{display:none;width:44px;height:44px;border:2px solid var(--green);align-items:center;justify-content:center;
   flex-direction:column;gap:4px;background:linear-gradient(180deg,#0d1615,#070d0c);
   clip-path:polygon(7px 0,100% 0,calc(100% - 7px) 100%,0 100%)}
 .hamburger span{display:block;width:18px;height:2px;background:var(--green);box-shadow:0 0 6px var(--green)}
@@ -242,7 +245,7 @@ ul{list-style:none}
 .stat-val{font-family:var(--ff-num);font-weight:700;font-size:clamp(1.3rem,2.3vw,1.8rem);line-height:1;
   font-variant-numeric:tabular-nums}
 .stat-pot{display:flex;align-items:baseline;gap:.5rem}
-.stat .live{font-family:var(--ff-pixel);font-size:.42rem;color:var(--green);letter-spacing:.04em;
+.stat .live{font-family:var(--ff-pixel);font-size:.5rem;color:var(--green);letter-spacing:.04em;
   display:inline-flex;align-items:center;gap:.35rem}
 .stat .live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green);
   box-shadow:0 0 8px var(--green);animation:ledpulse 1.4s ease-in-out infinite}
@@ -454,13 +457,62 @@ ul{list-style:none}
 .lb-card .who .nm{font-family:var(--ff-display);font-weight:700;text-transform:uppercase;letter-spacing:.03em;
   font-size:1.02rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lb-card .who .dt{color:var(--muted);font-size:.72rem}
-.lb-card .stats{text-align:right}
+.lb-card .stats{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:.15rem}
 .lb-card .stats .s{font-family:var(--ff-num);font-weight:700;color:var(--pink);font-size:1.05rem}
 .lb-card .stats .pw{font-family:var(--ff-num);font-weight:700;color:var(--green);font-size:.84rem}
 .lb-card.top1{background:linear-gradient(90deg,rgba(255,200,61,.1),transparent 70%)}
 .lb-card.top2{background:linear-gradient(90deg,rgba(34,244,255,.08),transparent 70%)}
 .lb-card.top3{background:linear-gradient(90deg,rgba(255,47,155,.08),transparent 70%)}
 .lb-cta{display:flex;justify-content:center}
+.lb-plays{font-family:var(--ff-num);font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+/* who-column stack inside mobile cards */
+.lb-card .who .col{display:flex;flex-direction:column;gap:.12rem;min-width:0}
+/* designed empty state (table + cards share it) */
+.lb-empty{display:flex;flex-direction:column;align-items:center;gap:.55rem;
+  padding:2.1rem 1rem 2.3rem;text-align:center}
+.lb-empty img{height:92px;width:auto;opacity:.9;filter:drop-shadow(0 0 18px rgba(145,255,0,.25))}
+.lb-empty-title{font-family:var(--ff-pixel);font-size:.72rem;color:var(--green);letter-spacing:.06em;
+  text-shadow:0 0 10px rgba(145,255,0,.5);margin-top:.35rem}
+.lb-empty p{color:rgba(217,255,214,.62);font-size:.95rem;font-weight:500;max-width:36ch;line-height:1.5}
+.lb-empty .btn{margin-top:.4rem}
+/* champion / legends pre-launch states */
+.winner-badge img.av.unclaimed{filter:grayscale(1) brightness(.85);opacity:.5}
+.winner-name.unclaimed{color:var(--muted);background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.14)}
+.legends-list li.empty{color:var(--muted);font-family:var(--ff-ui);font-weight:600;font-size:.88rem;
+  justify-content:center;text-align:center;line-height:1.45}
+
+/* ============================================================ FAQ ============================================================ */
+.faq{padding-top:var(--sect);padding-bottom:var(--sect)}
+.faq-frame{max-width:860px;margin-inline:auto}
+.faq-frame .arcade-in{padding:34px clamp(1.1rem,3vw,2.1rem) 1.2rem}
+.faq-list{display:flex;flex-direction:column}
+.faq-item{border-bottom:1px solid rgba(145,255,0,.14)}
+.faq-item:last-child{border-bottom:none}
+.faq-item summary{display:flex;align-items:center;gap:.95rem;list-style:none;cursor:pointer;
+  padding:1.05rem .45rem;min-height:44px;user-select:none;transition:background .18s ease}
+.faq-item summary::-webkit-details-marker{display:none}
+.faq-item summary::marker{content:""}
+.faq-item summary:hover{background:rgba(145,255,0,.04)}
+.faq-num{font-family:var(--ff-pixel);font-size:.6rem;color:var(--pink);flex:0 0 auto;
+  text-shadow:0 0 8px rgba(255,47,155,.45)}
+.faq-q{font-family:var(--ff-display);font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  font-size:clamp(1.02rem,1.6vw,1.2rem);color:var(--white);flex:1;min-width:0;transition:color .18s ease}
+.faq-chev{flex:0 0 auto;width:26px;height:26px;border:2px solid var(--green);position:relative;
+  clip-path:polygon(5px 0,100% 0,calc(100% - 5px) 100%,0 100%);
+  display:flex;align-items:center;justify-content:center;box-shadow:0 0 8px rgba(145,255,0,.3);
+  transition:box-shadow .18s ease}
+.faq-chev::before{content:"+";font-family:var(--ff-pixel);font-size:.7rem;color:var(--green);line-height:1;
+  transform:translateY(2px)}
+.faq-item[open] .faq-chev::before{content:"-"}
+.faq-item[open] summary{background:rgba(145,255,0,.05)}
+.faq-item[open] .faq-q{color:var(--green)}
+.faq-item summary:hover .faq-chev{box-shadow:0 0 14px rgba(145,255,0,.55)}
+.faq-item p{color:#b9c2c0;font-size:.95rem;font-weight:500;line-height:1.6;max-width:62ch;
+  padding:.1rem 2.6rem 1.2rem 2.5rem;animation:faqfade .28s ease}
+@keyframes faqfade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@media (max-width:560px){
+  .faq-item p{padding-inline:.45rem}
+}
 
 /* ============================================================ CTA + FOOTER ============================================================ */
 .footer-wrap{padding-top:var(--sect);padding-bottom:clamp(28px,5vw,48px)}
@@ -514,8 +566,8 @@ ul{list-style:none}
   display:flex;flex-direction:column;padding:1.4rem 1.3rem;gap:1.3rem;overflow-y:auto}
 .drawer.open .drawer-panel{transform:translateX(0)}
 .drawer-top{display:flex;align-items:center;justify-content:space-between}
-.drawer-top img{height:30px}
-.drawer-close{width:42px;height:42px;border:2px solid var(--green);display:flex;align-items:center;justify-content:center;
+.drawer-top img{height:30px;width:auto}
+.drawer-close{width:44px;height:44px;border:2px solid var(--green);display:flex;align-items:center;justify-content:center;
   font-size:1.3rem;color:var(--green);background:linear-gradient(180deg,#0d1615,#070d0c);
   clip-path:polygon(7px 0,100% 0,calc(100% - 7px) 100%,0 100%)}
 .drawer-nav{display:flex;flex-direction:column;gap:.3rem}
@@ -540,6 +592,12 @@ ul{list-style:none}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* ============================================================ RESPONSIVE ============================================================ */
+@media (min-width:1081px){
+  /* the cabinet column is far taller than the vault's content; let the vault
+     hug its content and ride along instead of leaving a dead void below it */
+  .arena{align-items:start}
+  .vault{position:sticky;top:82px}
+}
 @media (max-width:1080px){
   .arena{grid-template-columns:1fr}
   .vault{max-width:520px;width:100%;margin-inline:auto}
@@ -574,6 +632,13 @@ ul{list-style:none}
   .lb-cards{display:flex}
   .footer-bar{flex-direction:column;align-items:flex-start;gap:.9rem}
   .footer-copy{font-size:.62rem}
+}
+@media (max-width:520px){
+  /* keep the header on one calm line: smaller brand, tighter actions,
+     wallet label never wraps */
+  .brand img{height:42px}
+  .header-actions{gap:.45rem}
+  .btn-wallet{font-size:.7rem;letter-spacing:.05em;padding:.6em .75em}
 }
 @media (max-width:420px){
   .hero-cta{flex-direction:column;width:100%}

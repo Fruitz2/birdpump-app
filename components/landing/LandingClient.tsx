@@ -5,14 +5,21 @@
 // (pot, leaderboard, $PUMPBIRD price, wallet connect) is wired into the
 // backend API via the same Authorization scheme the game flow uses.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useWallet } from "@/components/wallet/WalletProvider";
 import { apiGet } from "@/lib/client/api";
 import { avatarUrl } from "@/lib/profile/avatars";
-import { PumpBirdGame, type GameResult } from "@/components/game/PumpBirdGame";
+import {
+  PumpBirdGame,
+  readSoundPref,
+  toggleGlobalSound,
+  SOUND_EVENT,
+  type GameResult
+} from "@/components/game/PumpBirdGame";
 import { PaidGameSession } from "@/components/game/PaidGameSession";
+import { FAQ_ITEMS } from "@/components/landing/faq-data";
 
 type GameMode = "idle" | "fun" | "paid";
 
@@ -28,6 +35,7 @@ type Leaderboard = {
     displayName: string | null;
     avatarId: string | null;
     bestScore: number;
+    totalPlays: number;
     totalWonTokens: string;
   }>;
 };
@@ -81,7 +89,10 @@ export function LandingClient() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [soundOn, setSoundOn] = useState(false);
+  // Mirrors the game's persisted audio pref (default: on). Server renders
+  // "on"; the mount effect below corrects it from localStorage and keeps it
+  // in sync when the in-game toggle or the M key flips the sound.
+  const [soundOn, setSoundOn] = useState(true);
   const [activeSection, setActiveSection] = useState("top");
   const [walletBusy, setWalletBusy] = useState(false);
   const [gameMode, setGameMode] = useState<GameMode>("idle");
@@ -207,12 +218,39 @@ export function LandingClient() {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
   }, []);
 
-  // Lock body scroll when drawer is open
+  // ─────────────────────────────────────────
+  // Game audio — the header button drives the SAME engine as the in-game
+  // toggle (see PumpBirdGame). Sync from storage on mount, then follow the
+  // shared window event in both directions.
+  // ─────────────────────────────────────────
+  useEffect(() => {
+    setSoundOn(readSoundPref());
+    const onSound = (e: Event) => {
+      const on = (e as CustomEvent<{ on: boolean }>).detail?.on;
+      if (typeof on === "boolean") setSoundOn(on);
+    };
+    window.addEventListener(SOUND_EVENT, onSound);
+    return () => window.removeEventListener(SOUND_EVENT, onSound);
+  }, []);
+
+  const handleSoundToggle = useCallback(() => {
+    const on = toggleGlobalSound();
+    showToast(on ? "Game audio on" : "Game audio muted");
+  }, [showToast]);
+
+  // Lock body scroll when drawer is open + close it with Escape
   useEffect(() => {
     if (drawerOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
-      return () => { document.body.style.overflow = prev; };
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === "Escape") setDrawerOpen(false);
+      };
+      window.addEventListener("keydown", onKey);
+      return () => {
+        document.body.style.overflow = prev;
+        window.removeEventListener("keydown", onKey);
+      };
     }
     return undefined;
   }, [drawerOpen]);
@@ -223,9 +261,10 @@ export function LandingClient() {
   const scrollToArena = useCallback(() => {
     const arena = document.getElementById("play");
     if (arena) {
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       window.scrollTo({
         top: arena.getBoundingClientRect().top + window.pageYOffset - 70,
-        behavior: "smooth"
+        behavior: reduced ? "auto" : "smooth"
       });
     }
   }, []);
@@ -306,26 +345,32 @@ export function LandingClient() {
   }, [showToast, wallet, walletBusy]);
 
   // ─────────────────────────────────────────
-  // Derived display values
+  // Derived display values.
+  // "—" is reserved for "still loading". A real zero pot reads "$0.00" and a
+  // funded pot with no oracle quote yet falls back to the raw token amount,
+  // so pre-launch never looks broken.
   // ─────────────────────────────────────────
   const potUsdDisplay = (() => {
-    if (!pot || !quote || typeof quote.tokenUsd !== "number" || typeof quote.tokenDecimals !== "number") return "—";
+    if (!pot) return "—";
     try {
       const raw = BigInt(pot.potTokenAmount);
+      if (raw === BigInt(0)) return "$0.00";
+      if (!quote || typeof quote.tokenUsd !== "number" || typeof quote.tokenDecimals !== "number") {
+        return `${fmtTokenRaw(pot.potTokenAmount, 6)} $PB`;
+      }
       const div = BigInt(10) ** BigInt(quote.tokenDecimals);
       const whole = Number(raw / div);
-      const usd = whole * quote.tokenUsd;
-      return fmtUsd(usd);
+      return fmtUsd(whole * quote.tokenUsd);
     } catch {
       return "—";
     }
   })();
-  const potTokenDisplay = pot ? fmtTokenRaw(pot.potTokenAmount, quote?.tokenDecimals ?? 6) : "—";
+  const potTokenDisplay = pot ? fmtTokenRaw(pot.potTokenAmount, quote?.tokenDecimals ?? 6) : "0";
   const champion = board[0] ?? null;
-  const championName = champion?.displayName ?? (champion?.wallet ? short(champion.wallet) : "—");
+  const championName = champion?.displayName ?? (champion?.wallet ? short(champion.wallet) : "Unclaimed");
   const highscore = pot?.allTimeHighScore ?? 0;
   const playAmtTarget = quote?.amount?.display?.target;
-  const playAmt = typeof playAmtTarget === "number" ? `${fmtNumber(playAmtTarget)} $PUMPBIRD` : "—";
+  const playAmt = typeof playAmtTarget === "number" ? `${fmtNumber(playAmtTarget)} $PUMPBIRD` : null;
 
   return (
     <>
@@ -392,11 +437,10 @@ export function LandingClient() {
             <button
               className={`btn-icon${soundOn ? " playing" : ""}`}
               type="button"
-              aria-label="Toggle arcade audio"
-              onClick={() => {
-                setSoundOn(!soundOn);
-                showToast(!soundOn ? "Arcade audio on (ships with the game)" : "Audio muted");
-              }}
+              aria-label={soundOn ? "Mute game audio" : "Unmute game audio"}
+              aria-pressed={soundOn}
+              title={soundOn ? "Mute game audio" : "Unmute game audio"}
+              onClick={handleSoundToggle}
             >
               {soundOn ? "♫" : "♪"}
             </button>
@@ -613,7 +657,13 @@ export function LandingClient() {
           <div className="play-bar reveal">
             <button type="button" className="btn btn-primary big" onClick={handlePlayPaid}>▶ Play Now — $1</button>
             <p className="play-meta">
-              $1 ≈ <span className="green">{playAmt}</span> · <span className="pm-live">live price</span> · beat {highscore || "the high"} to take the pot
+              {playAmt ? (
+                <>$1 ≈ <span className="green">{playAmt}</span> · <span className="pm-live">live price</span></>
+              ) : (
+                <>$1 per life · <span className="pm-live">price goes live at launch</span></>
+              )}
+              {" · "}
+              {highscore > 0 ? `beat ${highscore} to take the pot` : "the first highscore takes the crown"}
             </p>
           </div>
         </div>
@@ -678,14 +728,23 @@ export function LandingClient() {
               <div className="side-title">Champion</div>
               <div className="winner-badge">
                 <Image className="crown" src={`${BASE_ASSETS}icon-crown.png`} alt="" width={48} height={48} unoptimized />
-                <Image className="av" src={avatarUrl(champion?.avatarId)} alt="" width={112} height={112} unoptimized />
+                <Image
+                  className={`av${champion ? "" : " unclaimed"}`}
+                  src={avatarUrl(champion?.avatarId)}
+                  alt=""
+                  width={112}
+                  height={112}
+                  unoptimized
+                />
               </div>
-              <div className="winner-name">{championName}</div>
+              <div className={`winner-name${champion ? "" : " unclaimed"}`}>
+                {champion ? championName : "Throne is empty"}
+              </div>
               <div className="winner-stats">
                 <div><span className="k">Score</span><span className="s">{champion?.bestScore ?? 0}</span></div>
                 <div><span className="k">Won</span><span className="w">{champion ? fmtTokenRaw(champion.totalWonTokens, quote?.tokenDecimals ?? 6) : 0} $PB</span></div>
               </div>
-              <div className="winner-time">ALL-TIME</div>
+              <div className="winner-time">{champion ? "ALL-TIME" : "FIRST WINNER TAKES THE CROWN"}</div>
             </div>
           </aside>
 
@@ -698,8 +757,13 @@ export function LandingClient() {
                   </thead>
                   <tbody>
                     {board.length === 0 && (
-                      <tr><td colSpan={5} style={{ textAlign: "center", padding: 24, color: "rgba(217,255,214,0.5)" }}>
-                        No scores yet — be the first to take the pot.
+                      <tr><td colSpan={5}>
+                        <div className="lb-empty">
+                          <Image src={`${BASE_ASSETS}emblem-takepot.png`} alt="" width={96} height={96} unoptimized />
+                          <div className="lb-empty-title">THE BOARD IS EMPTY</div>
+                          <p>No scores yet. The first run sets the highscore, and the crown is up for grabs.</p>
+                          <button type="button" className="btn btn-ghost sm" onClick={handlePlayFun}>Warm up for free</button>
+                        </div>
                       </td></tr>
                     )}
                     {board.map((row, i) => (
@@ -718,11 +782,45 @@ export function LandingClient() {
                         </span></td>
                         <td className="num"><span className="lb-score">{row.bestScore}</span></td>
                         <td className="num"><span className="lb-pot">{fmtTokenRaw(row.totalWonTokens, quote?.tokenDecimals ?? 6)}</span></td>
-                        <td className="num"><span className="lb-date">—</span></td>
+                        <td className="num"><span className="lb-plays">{fmtNumber(row.totalPlays ?? 0)}</span></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+
+                {/* Card layout for ≤680px — same data, readable on phones
+                    (the table is display:none there). */}
+                <div className="lb-cards">
+                  {board.length === 0 && (
+                    <div className="lb-empty">
+                      <Image src={`${BASE_ASSETS}emblem-takepot.png`} alt="" width={96} height={96} unoptimized />
+                      <div className="lb-empty-title">THE BOARD IS EMPTY</div>
+                      <p>No scores yet. The first run sets the highscore, and the crown is up for grabs.</p>
+                      <button type="button" className="btn btn-ghost sm" onClick={handlePlayFun}>Warm up for free</button>
+                    </div>
+                  )}
+                  {board.map((row, i) => (
+                    <div key={row.wallet} className={`lb-card${i < 3 ? ` top${i + 1}` : ""}`}>
+                      <span className="rank">
+                        {i === 0 ? <Image src={`${BASE_ASSETS}icon-crown.png`} alt="#1" width={28} height={28} unoptimized /> :
+                         i === 1 ? <Image src={`${BASE_ASSETS}icon-trophy.png`} alt="#2" width={28} height={28} unoptimized /> :
+                         i === 2 ? <Image src={`${BASE_ASSETS}icon-star.png`} alt="#3" width={28} height={28} unoptimized /> :
+                         <span className="n">{i + 1}</span>}
+                      </span>
+                      <span className="who">
+                        <Image src={avatarUrl(row.avatarId)} alt="" width={34} height={34} unoptimized />
+                        <span className="col">
+                          <span className="nm">{row.displayName ?? short(row.wallet)}</span>
+                          <span className="dt">{fmtNumber(row.totalPlays ?? 0)} plays</span>
+                        </span>
+                      </span>
+                      <span className="stats">
+                        <span className="s">{row.bestScore}</span>
+                        <span className="pw">{fmtTokenRaw(row.totalWonTokens, quote?.tokenDecimals ?? 6)} $PB</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="lb-cta reveal">
@@ -744,15 +842,30 @@ export function LandingClient() {
                     <span className="sc">{row.bestScore}</span>
                   </li>
                 ))}
-                {board.length === 0 && <li><span className="nm">—</span></li>}
+                {board.length === 0 && (
+                  <li className="empty">No legends yet. Your name goes here.</li>
+                )}
               </ul>
             </div>
           </aside>
         </div>
       </section>
 
+      {/* FAQ */}
+      <section className="faq container" id="faq">
+        <div className="title-wrap reveal">
+          <h2 className="section-title"><span className="bolt">⚡</span> FAQ <span className="bolt">⚡</span></h2>
+        </div>
+        <div className="faq-frame arcade reveal">
+          <div className="arcade-tab">Player&apos;s Manual</div>
+          <div className="arcade-in">
+            <FaqList />
+          </div>
+        </div>
+      </section>
+
       {/* CTA + FOOTER */}
-      <section className="footer-wrap container" id="faq">
+      <section className="footer-wrap container">
         <div className="footer-block">
           <div className="cta-panel">
             <div className="about-card reveal">
@@ -836,24 +949,32 @@ export function LandingClient() {
       </div>
 
       {/* TOAST */}
-      <div className={`toast${toast ? " show" : ""}`}>
+      <div className={`toast${toast ? " show" : ""}`} role="status" aria-live="polite">
         <span className="led" />
         <span>{toast ?? ""}</span>
       </div>
-
-      <style jsx>{`
-        .footer-link-btn {
-          background: transparent;
-          border: none;
-          padding: 0;
-          font: inherit;
-          color: inherit;
-          cursor: pointer;
-        }
-      `}</style>
     </>
   );
 }
+
+// Memoized so the 5s data polls never re-render the accordion — the user's
+// open/closed choices on the <details> elements stay untouched.
+const FaqList = memo(function FaqList() {
+  return (
+    <div className="faq-list">
+      {FAQ_ITEMS.map((item, i) => (
+        <details key={item.q} className="faq-item" open={i === 0}>
+          <summary>
+            <span className="faq-num" aria-hidden="true">{String(i + 1).padStart(2, "0")}</span>
+            <span className="faq-q">{item.q}</span>
+            <span className="faq-chev" aria-hidden="true" />
+          </summary>
+          <p>{item.a}</p>
+        </details>
+      ))}
+    </div>
+  );
+});
 
 function HowCard({
   num,

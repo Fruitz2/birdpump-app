@@ -33,3 +33,17 @@ img {
 .bp-hidden {
   display: none !important;
 }
+
+/* Reduced motion, app-wide. landing.css carries its own copy for the landing
+   page; this one also covers /play, /play-fun and /counter, which don't.
+   (Canvas gameplay is JS-driven and unaffected — only CSS decoration stops.) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  html {
+    scroll-behavior: auto !important;
+  }
+}

@@ -13,6 +13,9 @@ function makeSeed(): string {
 export default function PlayFunPage() {
   const [seed, setSeed] = useState<string>(() => makeSeed());
   const [lastResult, setLastResult] = useState<GameResult | null>(null);
+  // First visit shows the START screen (the click is also the audio-unlock
+  // gesture); every retry restarts instantly — "TAP TO RETRY" means it.
+  const [autoStart, setAutoStart] = useState(false);
 
   const handleComplete = useCallback((r: GameResult) => {
     setLastResult(r);
@@ -20,6 +23,7 @@ export default function PlayFunPage() {
 
   const playAgain = useCallback(() => {
     setLastResult(null);
+    setAutoStart(true);
     setSeed(makeSeed());
   }, []);
 
@@ -36,6 +40,7 @@ export default function PlayFunPage() {
         mode="fun"
         seed={seed}
         variant="custom"
+        autoStart={autoStart}
         onComplete={handleComplete}
         onExit={() => (window.location.href = "/")}
         onRestart={playAgain}

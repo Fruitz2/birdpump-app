@@ -716,6 +716,35 @@ body:has(.ctr-root) {
 }
 
 /* ─── RESPONSIVE ─── */
+
+/* Wide-but-short viewports (1440×900 laptops etc). The OBS layout assumes
+   1080px of height; below 1000px the fixed rows clipped the USD line under
+   the pot number. Scale the hero + rows down. 1920×1080 is untouched. */
+@media (min-width: 1281px) and (max-height: 1000px) {
+  .ctr-root { grid-template-rows: 72px minmax(0, 1fr) 290px 178px 38px; }
+  .ctr-hero { padding: 18px 48px 14px; }
+  .ctr-pot-number { font-size: clamp(96px, 19vh, 240px); letter-spacing: -5px; }
+  .ctr-pot-sub { margin-top: 8px; }
+  .ctr-pot-usd { font-size: 32px; }
+  .ctr-pot-usd-eq { font-size: 22px; }
+  .ctr-pot-meta { margin-top: 12px; }
+  .ctr-mascot { max-height: 46vh; }
+  .ctr-speech { padding: 12px 16px; }
+  .ctr-speech-shout { font-size: 18px; }
+  .ctr-mid { padding: 16px 48px; }
+  .ctr-data-row { padding: 4px 0; }
+  .ctr-data-v { font-size: 16px; }
+  .ctr-data-k { font-size: 11px; }
+  .ctr-king-portrait { width: 132px; height: 132px; }
+  .ctr-king-body { grid-template-columns: 132px 1fr; }
+  .ctr-king-name { font-size: 28px; }
+  .ctr-king-score-n, .ctr-king-score-w { font-size: 28px; }
+  .ctr-board { padding: 12px 48px 14px; }
+  .ctr-card-score { font-size: 26px; }
+  .ctr-card-rank img { width: 34px; height: 34px; }
+  .ctr-empty-emblem { width: 64px; height: 64px; }
+}
+
 @media (max-width: 1280px) {
   .ctr-root { grid-template-rows: 72px 1fr 220px 170px 36px; }
   .ctr-hero { padding: 22px 28px; }
