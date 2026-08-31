@@ -13,6 +13,15 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 config({ path: ".env" });
 
+// spectra-vault injects secrets under their vault key names. The vault
+// namespaces this project's shared API keys as PUMPBIRD_*, so map them onto
+// the names the app actually reads. A value already present in the
+// environment always wins, so a real .env.local is never overridden.
+for (const name of ["BIRDEYE_API_KEY", "HELIUS_API_KEY"]) {
+  const vaulted = process.env[`PUMPBIRD_${name}`];
+  if (vaulted && !process.env[name]) process.env[name] = vaulted;
+}
+
 import {
   ComputeBudgetProgram,
   Keypair,
@@ -256,19 +265,26 @@ async function main() {
   }
 
   // ---- 7. supporting services ----------------------------------------------
-  record("DATABASE_URL", Boolean(process.env.DATABASE_URL), process.env.DATABASE_URL ? "set" : "missing");
+  // These are consumed by the DEPLOYED app, not by this script. Their real
+  // proof is `npm run launch:verify`, which hits production and fails if the
+  // database, cache or auth are not wired. Missing here only means they are
+  // absent from THIS machine, which is normal and not a launch blocker.
+  record("DATABASE_URL", Boolean(process.env.DATABASE_URL), process.env.DATABASE_URL ? "set" : "not on this machine (checked by launch:verify)", false);
   record(
     "Upstash Redis",
     Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN),
-    process.env.KV_REST_API_URL ? "set" : "missing"
+    process.env.KV_REST_API_URL ? "set" : "not on this machine (checked by launch:verify)",
+    false
   );
-  record("HELIUS_API_KEY", Boolean(process.env.HELIUS_API_KEY), process.env.HELIUS_API_KEY ? "set" : "missing", false);
+  record("JWT_SECRET", Boolean(process.env.JWT_SECRET), process.env.JWT_SECRET ? "set" : "not on this machine (checked by launch:verify)", false);
+  record("HELIUS_API_KEY", Boolean(process.env.HELIUS_API_KEY), process.env.HELIUS_API_KEY ? "set" : "missing (falls back to the public RPC, which rate limits)", false);
+  // This one does block: without it every quote prices SOL from a hardcoded
+  // constant, and a graduated token cannot be priced at all.
   record("BIRDEYE_API_KEY", Boolean(process.env.BIRDEYE_API_KEY), process.env.BIRDEYE_API_KEY ? "set" : "missing");
-  record("JWT_SECRET", Boolean(process.env.JWT_SECRET), process.env.JWT_SECRET ? "set" : "missing");
 
   // ---- 8. what to paste into Vercel ----------------------------------------
   console.log("\n" + "=".repeat(72));
-  console.log("SET THESE IN VERCEL (Production), then redeploy:\n");
+  console.log("SET THESE IN THE HOSTING ENV (Production), then redeploy:\n");
   console.log(`  PUMPBIRD_TOKEN_MINT=${mint.toBase58()}`);
   console.log(`  PUMPBIRD_TOKEN_DECIMALS=${decimals}`);
   console.log(`  PUMPBIRD_TOKEN_PROGRAM=${tokenProgramName}`);

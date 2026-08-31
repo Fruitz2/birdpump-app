@@ -30,8 +30,13 @@ somebody has to actually go and burn them.
 ## The one command
 
 ```bash
-npm run launch -- <CONTRACT_ADDRESS>
+npm run launch:go -- <CONTRACT_ADDRESS>
 ```
+
+`launch:go` runs the launcher under `spectra-vault`, which injects the treasury key and the
+Birdeye and Helius keys for the duration of the process only. Nothing is written to disk and no
+value is ever printed. `npm run launch -- <CA>` is the same script when the environment is
+already populated some other way.
 
 It reads the mint off chain rather than trusting anything typed at it, and it is safe to run
 as many times as you like. In order it:
@@ -48,7 +53,7 @@ as many times as you like. In order it:
 9. **Creates the treasury token account** if it is missing (idempotent, safe to repeat)
 10. Prints the exact environment variables to set
 
-`npm run launch:check -- <CA>` does all of the above read only and creates nothing.
+`npm run launch:go:check -- <CA>` does all of the above read only and creates nothing.
 
 Then, after setting the env vars and redeploying:
 
@@ -77,7 +82,9 @@ pair does not exist at all.
 
 ## Environment variables
 
-Set these after running `npm run launch`, which prints them filled in:
+Set these in the hosting environment after running `npm run launch`, which prints them filled
+in. Note: PumpBird does **not** deploy through the nebryx personal Vercel account, so do not
+reach for that token or CLI here.
 
 | Variable | Notes |
 |---|---|
@@ -100,9 +107,9 @@ tokens would already be in the treasury with nothing given back.
 If that happens anyway:
 
 ```bash
-npm run refund:list                 # every mispaid ticket
-npm run refund:mispaid -- --all     # refund all of them
-npm run refund:mispaid -- <TICKET>  # refund one
+npm run refund:go -- --list         # every mispaid ticket
+npm run refund:go -- --all          # refund all of them
+npm run refund:go -- <TICKET_ID>    # refund one
 ```
 
 The refunded amount is read back off chain from the payment signature using the same verifier
@@ -112,20 +119,44 @@ twice.
 
 ## Launch day order
 
-1. Push and deploy the current `main`
-2. Fund the treasury wallet with SOL. 0.2 is plenty
+1. **Get `main` deployed.** See the deploy access note below, this is the one step that is
+   blocked on someone else
+2. **Fund the treasury with SOL**: `AMnaq33vDkV4A9se8Xzuz9c4EP3cj9KcWJWfg7WeXu77`. 0.2 SOL is
+   plenty. It pays payout fees and ~0.002 SOL of rent per winner token account. Send SOL, not
+   $PUMPBIRD
 3. Launch the token on pump.fun
-4. `npm run launch -- <CA>` and fix anything it flags
+4. `npm run launch:go -- <CA>`, which creates the treasury token account and prints the env
 5. Set the printed environment variables and redeploy
 6. `npm run launch:verify`
 7. **Buy one life with a real wallet and play it.** Nothing before this proves the end to end
    flow, because the flow cannot exist until the mint does
 8. Announce
 
+## Deploy access
+
+The remote is `https://github.com/Fruitz2/birdpump-app.git` and it auto-deploys. As of
+2026-08-31 the local `main` is **4 commits ahead of origin** and the `0xnebryx` GitHub account
+**cannot push to it**:
+
+```
+remote: Permission to Fruitz2/birdpump-app.git denied to 0xnebryx.
+```
+
+So the deployed site is still the pre-fix build: no FAQ, invisible mobile leaderboard, the EXIT
+button inside the death screen retry tap zone (a mis-tap costs a paid life on `/play`), and the
+Token-2022 payment bug. Until those four commits are deployed, paid play cannot work no matter
+what the environment variables say. Either grant `0xnebryx` write access, or have the repo
+owner pull and merge.
+
 ## Known gaps, stated plainly
 
 - The 25% burn reserve is a database number. Burning it is a manual job.
 - No automated test covers payment verification, the split or settlement. The 23 that exist
   cover the simulator, SIWS and the token program derivation.
-- `npm run launch` needs `TREASURY_SECRET_KEY` in the local environment to check the treasury
-  and create its token account. Everything before that step runs without it.
+- `npm run launch` needs `TREASURY_SECRET_KEY` in the environment to check the treasury and
+  create its token account. `launch:go` supplies it from spectra-vault. Everything before that
+  step runs without it.
+- The treasury key, Birdeye key and Helius key are in spectra-vault as `TREASURY_SECRET_KEY`,
+  `PUMPBIRD_BIRDEYE_API_KEY` and `PUMPBIRD_HELIUS_API_KEY`. The plaintext copy at
+  `~/birdpump-treasury-secret.txt` is now redundant and should be deleted once you are happy
+  the vault copy works.
