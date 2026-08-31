@@ -11,6 +11,18 @@ import {
 const TOKEN_PROGRAM_ID = new PublicKey(
   "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 );
+// pump.fun issues Token-2022 mints, so this is the default here. The server
+// tells us which program the mint actually lives under (`tokenProgram` on the
+// quote/create payload) and that value wins. The program id is one of the ATA
+// derivation seeds, so a wrong value silently derives a different address and
+// the transfer goes nowhere.
+const TOKEN_2022_PROGRAM_ID = new PublicKey(
+  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+);
+
+export function tokenProgramFromName(name?: string | null): PublicKey {
+  return name === "legacy" ? TOKEN_PROGRAM_ID : TOKEN_2022_PROGRAM_ID;
+}
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(
   "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
 );
@@ -18,9 +30,13 @@ const MEMO_PROGRAM_ID = new PublicKey(
   "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
 );
 
-export function getAtaAddress(mint: PublicKey, owner: PublicKey): PublicKey {
+export function getAtaAddress(
+  mint: PublicKey,
+  owner: PublicKey,
+  tokenProgramId: PublicKey = TOKEN_2022_PROGRAM_ID
+): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
-    [owner.toBytes(), TOKEN_PROGRAM_ID.toBytes(), mint.toBytes()],
+    [owner.toBytes(), tokenProgramId.toBytes(), mint.toBytes()],
     ASSOCIATED_TOKEN_PROGRAM_ID
   );
   return pda;
@@ -31,6 +47,7 @@ function createAtaIdempotentIx(input: {
   ata: PublicKey;
   owner: PublicKey;
   mint: PublicKey;
+  tokenProgramId: PublicKey;
 }): TransactionInstruction {
   return new TransactionInstruction({
     programId: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -40,7 +57,7 @@ function createAtaIdempotentIx(input: {
       { pubkey: input.owner, isSigner: false, isWritable: false },
       { pubkey: input.mint, isSigner: false, isWritable: false },
       { pubkey: new PublicKey("11111111111111111111111111111111"), isSigner: false, isWritable: false },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }
+      { pubkey: input.tokenProgramId, isSigner: false, isWritable: false }
     ],
     data: Buffer.from([1]) // create idempotent
   });
@@ -53,13 +70,14 @@ function createTransferCheckedIx(input: {
   owner: PublicKey;
   amount: bigint;
   decimals: number;
+  tokenProgramId: PublicKey;
 }): TransactionInstruction {
   const data = Buffer.alloc(10);
   data.writeUInt8(12, 0); // TransferChecked
   data.writeBigUInt64LE(input.amount, 1);
   data.writeUInt8(input.decimals, 9);
   return new TransactionInstruction({
-    programId: TOKEN_PROGRAM_ID,
+    programId: input.tokenProgramId,
     keys: [
       { pubkey: input.source, isSigner: false, isWritable: true },
       { pubkey: input.mint, isSigner: false, isWritable: false },
@@ -86,6 +104,9 @@ export type BuildEntryTxInput = {
   decimals: number;
   memo: string;
   priorityFeeMicroLamports?: number;
+  // "token2022" (default, what pump.fun issues) or "legacy". Comes straight
+  // from the server's quote/create payload.
+  tokenProgram?: string | null;
 };
 
 // Build a transaction that:
@@ -98,7 +119,8 @@ export function buildEntryTransaction(input: BuildEntryTxInput): Transaction {
   const wallet = new PublicKey(input.wallet);
   const mint = new PublicKey(input.tokenMint);
   const treasuryAta = new PublicKey(input.treasuryAta);
-  const userAta = getAtaAddress(mint, wallet);
+  const tokenProgramId = tokenProgramFromName(input.tokenProgram);
+  const userAta = getAtaAddress(mint, wallet, tokenProgramId);
 
   const tx = new Transaction();
 
@@ -118,7 +140,8 @@ export function buildEntryTransaction(input: BuildEntryTxInput): Transaction {
       payer: wallet,
       ata: userAta,
       owner: wallet,
-      mint
+      mint,
+      tokenProgramId
     })
   );
 
@@ -129,7 +152,8 @@ export function buildEntryTransaction(input: BuildEntryTxInput): Transaction {
       destination: treasuryAta,
       owner: wallet,
       amount: input.amountRaw,
-      decimals: input.decimals
+      decimals: input.decimals,
+      tokenProgramId
     })
   );
 

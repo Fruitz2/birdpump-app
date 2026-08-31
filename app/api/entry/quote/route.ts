@@ -3,7 +3,7 @@ import { ok } from "@/lib/http/response";
 import { getPumpBirdPrice, rawToDisplay } from "@/lib/price/pumpbird";
 import { getTreasuryAddress, getTreasuryAta } from "@/lib/solana/treasury";
 
-const SLIPPAGE_BPS = Number.parseInt(process.env.SLIPPAGE_BPS ?? "300", 10); // 3%
+const SLIPPAGE_BPS = Number.parseInt(process.env.SLIPPAGE_BPS ?? "1000", 10); // 10% — a fresh pump.fun curve moves several % between quote and signature; a tight band strands funds in `mispaid`
 const QUOTE_TTL_MS = Number.parseInt(process.env.QUOTE_TTL_MS ?? "10000", 10);
 const MAX_LIVES = Number.parseInt(process.env.MAX_LIVES_PER_TICKET ?? "100", 10);
 
@@ -49,6 +49,7 @@ export const GET = route(
       entryUsdCents: totalCents,
       tokenMint: price.tokenMint,
       tokenDecimals: price.tokenDecimals,
+      tokenProgram: process.env.PUMPBIRD_TOKEN_PROGRAM === "legacy" ? "legacy" : "token2022",
       tokenUsd: price.tokenUsd,
       tokenSol: price.tokenSol,
       solUsd: price.solUsd,

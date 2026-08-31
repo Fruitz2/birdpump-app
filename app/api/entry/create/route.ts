@@ -9,7 +9,8 @@ import {
   getTokenMint,
   getTokenDecimals,
   getTreasuryAddress,
-  getTreasuryAta
+  getTreasuryAta,
+  treasuryAtaExists
 } from "@/lib/solana/treasury";
 
 const MAX_LIVES = Number.parseInt(process.env.MAX_LIVES_PER_TICKET ?? "100", 10);
@@ -22,7 +23,7 @@ const Body = z.object({
 });
 
 const TICKET_TTL_MIN = 15;
-const SLIPPAGE_BPS = Number.parseInt(process.env.SLIPPAGE_BPS ?? "300", 10);
+const SLIPPAGE_BPS = Number.parseInt(process.env.SLIPPAGE_BPS ?? "1000", 10);
 const QUOTE_TTL_MS = Number.parseInt(process.env.QUOTE_TTL_MS ?? "10000", 10);
 
 export const runtime = "nodejs";
@@ -49,6 +50,17 @@ export const POST = route(
       decimals = getTokenDecimals();
     } catch (e) {
       return err(503, "treasury_unavailable", (e as Error).message);
+    }
+
+    // The client transfer does not create the treasury ATA. Refuse to issue a
+    // ticket until that account exists, so a player can never sign a payment
+    // that is guaranteed to fail on chain. `npm run launch` creates it.
+    if (!(await treasuryAtaExists().catch(() => false))) {
+      return err(
+        503,
+        "treasury_ata_missing",
+        "Treasury token account does not exist yet. Run `npm run launch -- <MINT>`."
+      );
     }
 
     const price = await getPumpBirdPrice();
@@ -111,6 +123,10 @@ export const POST = route(
       payment: {
         tokenMint: mint,
         tokenDecimals: decimals,
+        // Which token program the mint lives under. The browser needs this to
+        // derive the right ATA and target the right program; pump.fun mints
+        // are Token-2022, and a wrong value silently sends nowhere.
+        tokenProgram: process.env.PUMPBIRD_TOKEN_PROGRAM === "legacy" ? "legacy" : "token2022",
         treasury,
         treasuryAta,
         amount: {

@@ -92,3 +92,29 @@ export function gasSolCapLamports(): bigint {
   const sol = Number.parseFloat(process.env.MIN_GAS_SOL ?? "0.05");
   return BigInt(Math.floor(sol * LAMPORTS_PER_SOL));
 }
+
+// --- Treasury ATA existence latch -------------------------------------------
+//
+// The client entry transaction transfers straight into the treasury ATA and
+// does NOT create it (lib/client/entry-tx.ts). If that account does not exist,
+// the player's transfer fails AFTER they have signed and paid a network fee.
+//
+// `scripts/launch.ts` creates the ATA at launch time. This latch is the belt
+// to that braces: /api/entry/create refuses to issue a ticket until the ATA is
+// confirmed on chain, so nobody can ever sign a doomed payment.
+//
+// An ATA, once created, is never closed by this system, so a single `true` is
+// cached forever. A `false` is never cached — we re-check every call until it
+// exists.
+let _ataConfirmed = false;
+
+export async function treasuryAtaExists(): Promise<boolean> {
+  if (_ataConfirmed) return true;
+  const conn = getConnection("confirmed");
+  const info = await conn.getAccountInfo(getTreasuryAta(), "confirmed");
+  if (info) {
+    _ataConfirmed = true;
+    return true;
+  }
+  return false;
+}

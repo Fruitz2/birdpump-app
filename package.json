@@ -2,7 +2,7 @@
   "name": "birdpump-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "BirdPump game backend — PumpBird-on-Solana paid entry, server-side replay, winner-takes-pot. Vercel-only.",
+  "description": "BirdPump game backend \u2014 PumpBird-on-Solana paid entry, server-side replay, winner-takes-pot. Vercel-only.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -16,7 +16,12 @@
     "db:studio": "drizzle-kit studio",
     "treasury:balance": "tsx scripts/treasury-balance.ts",
     "treasury:keygen": "tsx scripts/treasury-keygen.ts",
-    "avatars:generate": "tsx scripts/generate-avatars.ts"
+    "avatars:generate": "tsx scripts/generate-avatars.ts",
+    "launch": "tsx scripts/launch.ts",
+    "launch:check": "tsx scripts/launch.ts --check",
+    "launch:verify": "tsx scripts/launch-verify.ts",
+    "refund:list": "tsx scripts/refund-mispaid.ts --list",
+    "refund:mispaid": "tsx scripts/refund-mispaid.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
