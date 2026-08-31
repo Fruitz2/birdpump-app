@@ -272,7 +272,11 @@ export function PumpBirdGame({
   // global (see readSoundPref/setGlobalSound above); this state only mirrors
   // it so the button glyph re-renders. All toggles go through
   // toggleGlobalSound so the landing header button stays in sync.
-  const [soundOn, setSoundOn] = useState<boolean>(() => readSoundPref());
+  // Server-safe default, corrected from localStorage on mount. Reading storage in the
+  // initialiser makes the server and client render different text, which React reports
+  // as hydration error #418 and repairs by throwing away the SSR markup.
+  const [soundOn, setSoundOn] = useState<boolean>(true);
+  useEffect(() => { setSoundOn(readSoundPref()); }, []);
   useEffect(() => {
     sharedAudio.setEnabled(soundOn);
   }, [soundOn]);
@@ -305,14 +309,13 @@ export function PumpBirdGame({
 
   const [phase, setPhase] = useState<"start" | "playing" | "dead">("start");
   const [score, setScore] = useState(0);
-  const [best, setBest] = useState<number>(() => {
-    if (typeof window === "undefined") return 0;
+  // Same hydration rule as soundOn above: 0 on the server, real value after mount.
+  const [best, setBest] = useState<number>(0);
+  useEffect(() => {
     try {
-      return parseInt(window.localStorage.getItem("pumpBirdBest") ?? "0", 10) || 0;
-    } catch {
-      return 0;
-    }
-  });
+      setBest(parseInt(window.localStorage.getItem("pumpBirdBest") ?? "0", 10) || 0);
+    } catch { /* storage blocked: keep 0 */ }
+  }, []);
 
   // Load idle + dead sprites with a procedural fallback so the game NEVER
   // shows a blank or boxed bird.
@@ -1197,10 +1200,17 @@ export function PumpBirdGame({
               </div>
             )}
             {onExit && (
+              // Corner-anchored, OUT of the centred retry column. The whole overlay is a
+              // "tap anywhere to retry" target, so an EXIT sitting under the retry prompt
+              // gets hit by accident mid-retry - and on the paid route that mis-tap costs
+              // a life. Pinning it bottom-right takes it out of the tap path entirely.
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onExit(); }}
                 style={{
+                  position: "absolute",
+                  right: 16,
+                  bottom: 16,
                   fontFamily: "'Press Start 2P', monospace",
                   fontSize: 11,
                   background: "rgba(0,255,65,0.1)",
