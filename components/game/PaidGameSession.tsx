@@ -79,6 +79,7 @@ type CreatedTicket = {
     tokenMint: string;
     tokenDecimals: number;
     tokenProgram?: string | null;
+    createTreasuryAta?: boolean;
     treasury: string;
     treasuryAta: string;
     amount: { target: string; min: string; max: string; display: number };
@@ -262,7 +263,9 @@ export function PaidGameSession({ onExit }: { onExit?: () => void }) {
         amountRaw: BigInt(created.payment.amount.target),
         decimals: created.payment.tokenDecimals,
         memo: created.payment.memo,
-        tokenProgram: created.payment.tokenProgram
+        tokenProgram: created.payment.tokenProgram,
+        treasuryOwner: created.payment.treasury,
+        createTreasuryAta: created.payment.createTreasuryAta
       });
       signature = await wallet.signAndSend(tx);
     } catch (e) {

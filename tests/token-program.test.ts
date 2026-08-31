@@ -143,3 +143,58 @@ describe("instructions target the right program", () => {
     expect(ix.programId.toBase58()).toBe(TOKEN_PROGRAM_ID.toBase58());
   });
 });
+
+describe("treasury account self-healing", () => {
+  const wallet = new PublicKey("AMnaq33vDkV4A9se8Xzuz9c4EP3cj9KcWJWfg7WeXu77");
+  const treasuryOwner = new PublicKey(CURVE_PDA);
+  const treasuryAta = getAssociatedTokenAddress(MINT, treasuryOwner, TOKEN_2022_PROGRAM_ID);
+
+  const base = {
+    wallet: wallet.toBase58(),
+    tokenMint: MINT.toBase58(),
+    treasuryAta: treasuryAta.toBase58(),
+    treasuryOwner: treasuryOwner.toBase58(),
+    amountRaw: 1_000_000n,
+    decimals: 6,
+    memo: "bp:testtesttes"
+  };
+
+  it("omits the treasury creation instruction when the account already exists", async () => {
+    const { buildEntryTransaction } = await import("@/lib/client/entry-tx");
+    const tx = buildEntryTransaction({ ...base, createTreasuryAta: false });
+    const ataIxs = tx.instructions.filter(
+      (ix) => ix.programId.toBase58() === "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+    );
+    // just the player's own account
+    expect(ataIxs).toHaveLength(1);
+    expect(ataIxs[0].keys[1].pubkey.toBase58()).toBe(
+      getAssociatedTokenAddress(MINT, wallet, TOKEN_2022_PROGRAM_ID).toBase58()
+    );
+  });
+
+  it("adds a create-idempotent for the treasury account when the server asks", async () => {
+    const { buildEntryTransaction } = await import("@/lib/client/entry-tx");
+    const tx = buildEntryTransaction({ ...base, createTreasuryAta: true });
+    const ataIxs = tx.instructions.filter(
+      (ix) => ix.programId.toBase58() === "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+    );
+    expect(ataIxs).toHaveLength(2);
+    const created = ataIxs.map((ix) => ix.keys[1].pubkey.toBase58());
+    expect(created).toContain(treasuryAta.toBase58());
+    // every one is CreateIdempotent, so a race between two players is harmless
+    for (const ix of ataIxs) expect(ix.data[0]).toBe(1);
+    // the player pays the rent, and the treasury wallet is the owner
+    const treasuryIx = ataIxs.find((ix) => ix.keys[1].pubkey.equals(treasuryAta))!;
+    expect(treasuryIx.keys[0].pubkey.toBase58()).toBe(wallet.toBase58());
+    expect(treasuryIx.keys[2].pubkey.toBase58()).toBe(treasuryOwner.toBase58());
+  });
+
+  it("does nothing unsafe if the server asks but sends no treasury owner", async () => {
+    const { buildEntryTransaction } = await import("@/lib/client/entry-tx");
+    const tx = buildEntryTransaction({ ...base, treasuryOwner: undefined, createTreasuryAta: true });
+    const ataIxs = tx.instructions.filter(
+      (ix) => ix.programId.toBase58() === "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+    );
+    expect(ataIxs).toHaveLength(1);
+  });
+});

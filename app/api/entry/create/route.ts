@@ -52,16 +52,19 @@ export const POST = route(
       return err(503, "treasury_unavailable", (e as Error).message);
     }
 
-    // The client transfer does not create the treasury ATA. Refuse to issue a
-    // ticket until that account exists, so a player can never sign a payment
-    // that is guaranteed to fail on chain. `npm run launch` creates it.
-    if (!(await treasuryAtaExists().catch(() => false))) {
-      return err(
-        503,
-        "treasury_ata_missing",
-        "Treasury token account does not exist yet. Run `npm run launch -- <MINT>`."
-      );
-    }
+    // A transfer into a token account that does not exist fails, and the
+    // client transfer alone does not create one. `npm run launch` creates it
+    // from the treasury, which is the preferred path because the treasury pays
+    // the rent. But that needs the treasury to hold SOL, and a launch should
+    // not be blocked on it: if the account is still missing we tell the client
+    // to prepend a create-idempotent instruction, so the first player creates
+    // it (about 0.002 SOL, once, ever) and everything self-heals.
+    //
+    // On the RPC failing we assume it exists rather than making every player
+    // pay to attempt a creation that is probably unnecessary. The instruction
+    // is idempotent either way, so the only cost of being wrong is one
+    // rejected payment, not a lost one.
+    const needsTreasuryAta = !(await treasuryAtaExists().catch(() => true));
 
     const price = await getPumpBirdPrice();
     if (!price.available) {
@@ -127,6 +130,8 @@ export const POST = route(
         // derive the right ATA and target the right program; pump.fun mints
         // are Token-2022, and a wrong value silently sends nowhere.
         tokenProgram: process.env.PUMPBIRD_TOKEN_PROGRAM === "legacy" ? "legacy" : "token2022",
+        // true only until the treasury token account exists on chain
+        createTreasuryAta: needsTreasuryAta,
         treasury,
         treasuryAta,
         amount: {

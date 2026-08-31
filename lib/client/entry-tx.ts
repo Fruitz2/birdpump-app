@@ -100,6 +100,7 @@ export type BuildEntryTxInput = {
   wallet: string;        // base58
   tokenMint: string;     // base58
   treasuryAta: string;   // base58 destination ATA
+  treasuryOwner?: string; // base58 treasury wallet, needed only to create the ATA
   amountRaw: bigint;     // raw token units
   decimals: number;
   memo: string;
@@ -107,6 +108,10 @@ export type BuildEntryTxInput = {
   // "token2022" (default, what pump.fun issues) or "legacy". Comes straight
   // from the server's quote/create payload.
   tokenProgram?: string | null;
+  // Set by the server only while the treasury token account does not exist
+  // yet. Costs this player ~0.002 SOL of rent, once, and then never again for
+  // anyone. Without it the very first payment would fail.
+  createTreasuryAta?: boolean;
 };
 
 // Build a transaction that:
@@ -144,6 +149,21 @@ export function buildEntryTransaction(input: BuildEntryTxInput): Transaction {
       tokenProgramId
     })
   );
+
+  // The ATA program derives and validates the address from the OWNER, so
+  // creating the treasury's account needs the treasury wallet, not just the
+  // account address it derives to.
+  if (input.createTreasuryAta && input.treasuryOwner) {
+    tx.add(
+      createAtaIdempotentIx({
+        payer: wallet,
+        ata: treasuryAta,
+        owner: new PublicKey(input.treasuryOwner),
+        mint,
+        tokenProgramId
+      })
+    );
+  }
 
   tx.add(
     createTransferCheckedIx({
