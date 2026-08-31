@@ -13,9 +13,8 @@ import { apiGet } from "@/lib/client/api";
 import { avatarUrl } from "@/lib/profile/avatars";
 import {
   PumpBirdGame,
-  readSoundPref,
   toggleGlobalSound,
-  SOUND_EVENT,
+  useSoundPref,
   type GameResult
 } from "@/components/game/PumpBirdGame";
 import { PaidGameSession } from "@/components/game/PaidGameSession";
@@ -27,7 +26,14 @@ function makeFunSeed(): string {
   return "fun:" + Math.random().toString(36).slice(2, 12) + ":" + Date.now();
 }
 
-type Pot = { pot: { potTokenAmount: string; allTimeHighScore: number; allTimeHighWallet: string | null } };
+type Pot = {
+  pot: {
+    potTokenAmount: string;
+    allTimeHighScore: number;
+    allTimeHighWallet: string | null;
+    totalEntries?: number;
+  };
+};
 type Leaderboard = {
   leaderboard: Array<{
     rank: number;
@@ -56,8 +62,17 @@ function short(s: string): string {
   return s.length > 8 ? s.slice(0, 4) + "…" + s.slice(-4) : s;
 }
 
+// Deterministic thousands separator. toLocaleString depends on the runtime's
+// ICU data, which is one server/client formatting drift away from a hydration
+// mismatch — a pure regex formats identically everywhere.
+function thousands(intStr: string): string {
+  return intStr.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 function fmtUsd(n: number): string {
-  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fixed = n.toFixed(2);
+  const dot = fixed.indexOf(".");
+  return "$" + thousands(fixed.slice(0, dot)) + fixed.slice(dot);
 }
 
 function fmtTokenRaw(raw: string, decimals: number): string {
@@ -69,7 +84,7 @@ function fmtTokenRaw(raw: string, decimals: number): string {
     if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
     if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
     if (n >= 1e3) return (n / 1e3).toFixed(2) + "K";
-    return n.toLocaleString("en-US");
+    return thousands(whole.toString());
   } catch {
     return "—";
   }
@@ -79,7 +94,14 @@ function fmtNumber(n: number): string {
   if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
   if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
   if (n >= 1e3) return (n / 1e3).toFixed(2) + "K";
-  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  return thousands(String(Math.floor(n)));
+}
+
+function fmtPrice(n: number): string {
+  if (n >= 100) return "$" + n.toFixed(2);
+  if (n >= 0.01) return "$" + n.toFixed(4);
+  if (n >= 0.0001) return "$" + n.toFixed(6);
+  return "$" + n.toExponential(2);
 }
 
 export function LandingClient() {
@@ -89,10 +111,9 @@ export function LandingClient() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  // Mirrors the game's persisted audio pref (default: on). Server renders
-  // "on"; the mount effect below corrects it from localStorage and keeps it
-  // in sync when the in-game toggle or the M key flips the sound.
-  const [soundOn, setSoundOn] = useState(true);
+  // The game's persisted audio pref through a hydration-safe external store —
+  // header button, in-game toggle and the M key all read/write the same value.
+  const soundOn = useSoundPref();
   const [activeSection, setActiveSection] = useState("top");
   const [walletBusy, setWalletBusy] = useState(false);
   const [gameMode, setGameMode] = useState<GameMode>("idle");
@@ -103,7 +124,8 @@ export function LandingClient() {
   // so the "tap to enter" gesture turns into actually entering.
   const [funAutoStart, setFunAutoStart] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const tickerTrackRef = useRef<HTMLDivElement | null>(null);
+  const drawerPanelRef = useRef<HTMLDivElement | null>(null);
+  const hamburgerRef = useRef<HTMLButtonElement | null>(null);
 
   // ─────────────────────────────────────────
   // Live data polling
@@ -151,16 +173,6 @@ export function LandingClient() {
       clearInterval(boardId);
       clearInterval(quoteId);
     };
-  }, []);
-
-  // ─────────────────────────────────────────
-  // Ticker — duplicate content for seamless scroll
-  // ─────────────────────────────────────────
-  useEffect(() => {
-    const track = tickerTrackRef.current;
-    if (!track || track.dataset.doubled === "1") return;
-    track.innerHTML += track.innerHTML;
-    track.dataset.doubled = "1";
   }, []);
 
   // ─────────────────────────────────────────
@@ -218,38 +230,61 @@ export function LandingClient() {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
   }, []);
 
-  // ─────────────────────────────────────────
-  // Game audio — the header button drives the SAME engine as the in-game
-  // toggle (see PumpBirdGame). Sync from storage on mount, then follow the
-  // shared window event in both directions.
-  // ─────────────────────────────────────────
-  useEffect(() => {
-    setSoundOn(readSoundPref());
-    const onSound = (e: Event) => {
-      const on = (e as CustomEvent<{ on: boolean }>).detail?.on;
-      if (typeof on === "boolean") setSoundOn(on);
-    };
-    window.addEventListener(SOUND_EVENT, onSound);
-    return () => window.removeEventListener(SOUND_EVENT, onSound);
-  }, []);
-
   const handleSoundToggle = useCallback(() => {
     const on = toggleGlobalSound();
     showToast(on ? "Game audio on" : "Game audio muted");
   }, [showToast]);
 
-  // Lock body scroll when drawer is open + close it with Escape
+  // M mutes from anywhere on the landing page, not only once a game cabinet
+  // has mounted. Active only while no game is mounted — the game binds its
+  // own M handler and two listeners would cancel each other out.
+  useEffect(() => {
+    if (gameMode !== "idle") return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "KeyM" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      handleSoundToggle();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [gameMode, handleSoundToggle]);
+
+  // Drawer: lock body scroll, close with Escape, move focus into the dialog
+  // (and trap Tab inside it) while open, restore focus to the hamburger on
+  // close — aria-modal was previously claimed without any of this.
   useEffect(() => {
     if (drawerOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
+      const panel = drawerPanelRef.current;
+      panel?.querySelector<HTMLElement>(".drawer-close")?.focus();
       const onKey = (e: KeyboardEvent) => {
-        if (e.key === "Escape") setDrawerOpen(false);
+        if (e.key === "Escape") {
+          setDrawerOpen(false);
+          return;
+        }
+        if (e.key === "Tab" && panel) {
+          const els = Array.from(
+            panel.querySelectorAll<HTMLElement>("a[href], button:not([disabled])")
+          ).filter((el) => el.offsetParent !== null);
+          if (els.length === 0) return;
+          const first = els[0];
+          const last = els[els.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
       };
       window.addEventListener("keydown", onKey);
       return () => {
         document.body.style.overflow = prev;
         window.removeEventListener("keydown", onKey);
+        hamburgerRef.current?.focus();
       };
     }
     return undefined;
@@ -366,11 +401,53 @@ export function LandingClient() {
     }
   })();
   const potTokenDisplay = pot ? fmtTokenRaw(pot.potTokenAmount, quote?.tokenDecimals ?? 6) : "0";
+  const potZero = (() => {
+    if (!pot) return false;
+    try {
+      return BigInt(pot.potTokenAmount) === BigInt(0);
+    } catch {
+      return false;
+    }
+  })();
   const champion = board[0] ?? null;
   const championName = champion?.displayName ?? (champion?.wallet ? short(champion.wallet) : "Unclaimed");
   const highscore = pot?.allTimeHighScore ?? 0;
+  const totalEntries = pot?.totalEntries ?? 0;
   const playAmtTarget = quote?.amount?.display?.target;
   const playAmt = typeof playAmtTarget === "number" ? `${fmtNumber(playAmtTarget)} $PUMPBIRD` : null;
+
+  // Hero pot caption — reads differently while loading / pre-launch / live.
+  const heroPotSub = !pot
+    ? "connecting to the vault"
+    : potZero
+    ? "seeded at launch · every $1 entry feeds it"
+    : quote
+    ? `${potTokenDisplay} $PB in the vault · winner takes 100%`
+    : "winner takes 100% · paid straight to your wallet";
+
+  // Ticker — live data, not slogans. Until the first poll lands the list is
+  // deterministic (server and client render the same fallback items).
+  const tickerItems: Array<{ t: string; icon: "coin" | "bird" }> = pot
+    ? [
+        { t: `POT ${potUsdDisplay}`, icon: "coin" },
+        {
+          t: highscore > 0 ? `HIGH SCORE TO BEAT ${highscore}` : "FIRST RUN SETS THE HIGHSCORE",
+          icon: "bird"
+        },
+        { t: champion ? `CHAMPION ${championName.toUpperCase()}` : "THRONE IS EMPTY", icon: "coin" },
+        ...(totalEntries > 0 ? [{ t: `${fmtNumber(totalEntries)} ENTRIES PLAYED`, icon: "bird" as const }] : []),
+        ...(quote && typeof quote.tokenUsd === "number"
+          ? [{ t: `$PUMPBIRD ${fmtPrice(quote.tokenUsd)}`, icon: "coin" as const }]
+          : []),
+        { t: "EVERY RUN SERVER-VERIFIED", icon: "bird" },
+        { t: "$1 = ONE LIFE", icon: "coin" }
+      ]
+    : [
+        { t: "THE HIGHSCORE TAKES THE POT", icon: "coin" },
+        { t: "$1 = ONE LIFE", icon: "bird" },
+        { t: "EVERY RUN SERVER-VERIFIED", icon: "coin" },
+        { t: "BUILT ON PUMP.FUN", icon: "bird" }
+      ];
 
   return (
     <>
@@ -445,6 +522,7 @@ export function LandingClient() {
               {soundOn ? "♫" : "♪"}
             </button>
             <button
+              ref={hamburgerRef}
               className="hamburger"
               type="button"
               aria-label="Open menu"
@@ -466,12 +544,18 @@ export function LandingClient() {
               <span className="w">The Highscore</span>
               <span className="g">Takes the Pot.</span>
             </h1>
-            <p className="hero-body">
-              Play Pump.Bird for just <span className="green">$1</span> worth of $PUMPBIRD. Beat the highscore and take everything.
-            </p>
+            {/* The one number worth screenshotting, above the fold at display
+                scale — not 900px down. */}
+            <div className="hero-pot">
+              <span className="hp-label">
+                <span className="led" aria-hidden="true" /> Live pot
+              </span>
+              <span className={`hp-value${potZero ? " zero" : ""}`}>{potUsdDisplay}</span>
+              <span className="hp-sub">{heroPotSub}</span>
+            </div>
             <div className="hero-cta">
-              <button type="button" className="btn btn-primary" onClick={handlePlayPaid}>Play Now ›</button>
-              <button type="button" className="btn btn-ghost" onClick={handlePlayFun}>Try For Free</button>
+              <button type="button" className="btn btn-primary" onClick={handlePlayPaid}>Play Now · $1</button>
+              <button type="button" className="btn btn-ghost" onClick={handlePlayFun}>Warm Up Free</button>
             </div>
             <div className="built-on">
               Built on <span className="pf"><span className="pf-pill" /> pump.fun</span>
@@ -488,42 +572,33 @@ export function LandingClient() {
         </section>
       </main>
 
-      {/* TICKER */}
+      {/* TICKER — live data (last known values), rendered twice for the
+          seamless loop. The old innerHTML-doubling hack is gone: it survived
+          only because the items never re-rendered, which live data breaks. */}
       <div className="ticker" aria-hidden="true">
-        <div className="ticker-track" ref={tickerTrackRef}>
-          <span className="item g"><span className="bolt">⚡</span><Image src={`${BASE_ASSETS}icon-coin.png`} alt="" width={20} height={20} unoptimized />Beat the Highscore</span>
-          <span className="item p"><span className="bolt">⚡</span><Image src={`${BASE_ASSETS}icon-coin.png`} alt="" width={20} height={20} unoptimized />Take the Pot</span>
-          <span className="item g"><span className="bolt">⚡</span><Image src={`${BASE_ASSETS}avatar-default.png`} alt="" width={20} height={20} unoptimized />$1 to Play</span>
-          <span className="item p"><span className="bolt">⚡</span><Image src={`${BASE_ASSETS}icon-coin.png`} alt="" width={20} height={20} unoptimized />Win the Pot</span>
+        <div className="ticker-track">
+          {[...tickerItems, ...tickerItems].map((item, i) => (
+            <span key={i} className={`item ${i % 2 === 0 ? "g" : "p"}`}>
+              <Image
+                src={`${BASE_ASSETS}${item.icon === "coin" ? "icon-coin.png" : "avatar-default.png"}`}
+                alt=""
+                width={20}
+                height={20}
+                unoptimized
+              />
+              {item.t}
+            </span>
+          ))}
         </div>
       </div>
 
       {/* ARENA */}
+      {/* ARENA — the stat bar that used to sit here printed pot / highscore /
+          champion 400px away from the vault panel showing the same three
+          values at the same moment. The pot moved to the hero; the vault
+          keeps the rest. One statement per fact. */}
       <section className="arena container" id="play">
         <div className="arena-main">
-          <div className="statbar arcade reveal">
-            <div className="arcade-in">
-              <div className="stat">
-                <span className="stat-label">Current Pot</span>
-                <span className="stat-pot">
-                  <span className="stat-val green pot">{potUsdDisplay}</span>
-                </span>
-                <span className="live">Live updates</span>
-              </div>
-              <div className="stat">
-                <span className="stat-label">Current Highscore</span>
-                <span className="stat-val pink">{highscore}</span>
-              </div>
-              <div className="stat">
-                <span className="stat-label">Current Champion</span>
-                <span className="stat-val champ green">
-                  <Image src={`${BASE_ASSETS}icon-crown.png`} alt="" width={20} height={20} unoptimized />
-                  {championName}
-                </span>
-              </div>
-            </div>
-          </div>
-
           <div className="game-arena arcade reveal">
             <div className="arcade-tab pink game-marquee">
               <Image src={`${BASE_ASSETS}logo.png`} alt="PUMP.BIRD" width={140} height={32} unoptimized />
@@ -559,7 +634,7 @@ export function LandingClient() {
                     <Image className="gbird" src={`${BASE_ASSETS}avatar-default.png`} alt="" width={88} height={88} unoptimized />
                     <div className="gp-text">
                       <span className="big">TAP<br /><span className="g">TO PLAY</span></span>
-                      <span className="sub">▸ FREE — NO ENTRY ◂</span>
+                      <span className="sub">▸ FREE · NO ENTRY ◂</span>
                     </div>
                     <div className="insert">▸ OR PRESS PLAY NOW FOR $1 ◂</div>
                     <div className="glass" />
@@ -655,7 +730,7 @@ export function LandingClient() {
           </div>
 
           <div className="play-bar reveal">
-            <button type="button" className="btn btn-primary big" onClick={handlePlayPaid}>▶ Play Now — $1</button>
+            <button type="button" className="btn btn-primary big" onClick={handlePlayPaid}>▶ Play Now · $1</button>
             <p className="play-meta">
               {playAmt ? (
                 <>$1 ≈ <span className="green">{playAmt}</span> · <span className="pm-live">live price</span></>
@@ -668,7 +743,7 @@ export function LandingClient() {
           </div>
         </div>
 
-        <aside className="vault arcade reveal" aria-label="The Vault">
+        <aside className="vault arcade hot reveal" aria-label="The Vault">
           <div className="arcade-tab">Vault</div>
           <div className="arcade-in">
             <div className="vault-door">
@@ -701,27 +776,35 @@ export function LandingClient() {
         </aside>
       </section>
 
-      {/* HOW IT WORKS */}
+      {/* HOW IT WORKS — the emblems already carry their own step number and
+          label plate, so the cards, chips and repeated titles are gone. Four
+          badges on a dashed rail, staggered, the payoff step largest, each
+          caption adding a fact the emblem doesn't state. */}
       <section className="how container" id="how">
-        <div className="title-wrap reveal">
-          <h2 className="section-title"><span className="bolt">⚡</span> How It Works <span className="bolt">⚡</span></h2>
-        </div>
-        <div className="how-grid">
-          <HowCard num="1" title="Pay $1" emblem="emblem-pay" body="Pay $1 worth of $PUMPBIRD to enter the game." />
-          <span className="chev">»</span>
-          <HowCard num="2" title="Play" emblem="emblem-play" pink body="Play Pump.Bird and try to beat the highscore." />
-          <span className="chev">»</span>
-          <HowCard num="3" title="Beat Score" emblem="emblem-beat" body="Beat the current highscore to win." />
-          <span className="chev">»</span>
-          <HowCard num="4" title="Take Pot" emblem="emblem-takepot" pink body="You take the entire pot. Every time." />
+        <SectionHead index="01" title="How it works" sub="four steps, one pot" />
+        <div className="how-rail reveal">
+          <div className="how-step">
+            <Image className="emblem" src={`${BASE_ASSETS}emblem-pay.png`} alt="Step 1 — pay $1" width={160} height={160} unoptimized />
+            <p>In $PUMPBIRD, at the live market price. Packs of 1, 5, 10 or 25 lives.</p>
+          </div>
+          <div className="how-step lift">
+            <Image className="emblem" src={`${BASE_ASSETS}emblem-play.png`} alt="Step 2 — play" width={160} height={160} unoptimized />
+            <p>Same physics for everyone. One life per entry, played back to back.</p>
+          </div>
+          <div className="how-step">
+            <Image className="emblem" src={`${BASE_ASSETS}emblem-beat.png`} alt="Step 3 — beat the highscore" width={160} height={160} unoptimized />
+            <p>The all-time record is the only target. The server replays your run before it counts.</p>
+          </div>
+          <div className="how-step payoff">
+            <Image className="emblem" src={`${BASE_ASSETS}emblem-takepot.png`} alt="Step 4 — take the pot" width={192} height={192} unoptimized />
+            <p>100% of it, sent to your wallet automatically. No claiming, no waiting.</p>
+          </div>
         </div>
       </section>
 
       {/* LEADERBOARD */}
       <section className="leaderboard container" id="leaderboard">
-        <div className="title-wrap reveal">
-          <h2 className="section-title"><span className="bolt">⚡</span> Leaderboard <span className="bolt">⚡</span></h2>
-        </div>
+        <SectionHead index="02" title="Leaderboard" sub="rank by best score" />
         <div className="lb-layout">
           <aside className="side-panel winner arcade pink reveal">
             <div className="arcade-in">
@@ -752,14 +835,20 @@ export function LandingClient() {
             <div className="lb-frame arcade reveal">
               <div className="arcade-in">
                 <table className="lb-table">
-                  <thead>
-                    <tr><th>Rank</th><th>Player</th><th className="num">Score</th><th className="num">Won</th><th className="num">Plays</th></tr>
-                  </thead>
+                  {/* Column headers only when there are rows — RANK/PLAYER/
+                      SCORE spread over an empty table reads as broken. */}
+                  {board.length > 0 && (
+                    <thead>
+                      <tr><th>Rank</th><th>Player</th><th className="num">Score</th><th className="num">Won</th><th className="num">Plays</th></tr>
+                    </thead>
+                  )}
                   <tbody>
                     {board.length === 0 && (
                       <tr><td colSpan={5}>
                         <div className="lb-empty">
-                          <Image src={`${BASE_ASSETS}emblem-takepot.png`} alt="" width={96} height={96} unoptimized />
+                          <span className="lb-emblem-crop">
+                            <Image src={`${BASE_ASSETS}emblem-takepot.png`} alt="" width={96} height={96} unoptimized />
+                          </span>
                           <div className="lb-empty-title">THE BOARD IS EMPTY</div>
                           <p>No scores yet. The first run sets the highscore, and the crown is up for grabs.</p>
                           <button type="button" className="btn btn-ghost sm" onClick={handlePlayFun}>Warm up for free</button>
@@ -793,7 +882,9 @@ export function LandingClient() {
                 <div className="lb-cards">
                   {board.length === 0 && (
                     <div className="lb-empty">
-                      <Image src={`${BASE_ASSETS}emblem-takepot.png`} alt="" width={96} height={96} unoptimized />
+                      <span className="lb-emblem-crop">
+                        <Image src={`${BASE_ASSETS}emblem-takepot.png`} alt="" width={96} height={96} unoptimized />
+                      </span>
                       <div className="lb-empty-title">THE BOARD IS EMPTY</div>
                       <p>No scores yet. The first run sets the highscore, and the crown is up for grabs.</p>
                       <button type="button" className="btn btn-ghost sm" onClick={handlePlayFun}>Warm up for free</button>
@@ -846,6 +937,7 @@ export function LandingClient() {
                   <li className="empty">No legends yet. Your name goes here.</li>
                 )}
               </ul>
+              <div className="side-foot">top 5 · all-time</div>
             </div>
           </aside>
         </div>
@@ -853,9 +945,7 @@ export function LandingClient() {
 
       {/* FAQ */}
       <section className="faq container" id="faq">
-        <div className="title-wrap reveal">
-          <h2 className="section-title"><span className="bolt">⚡</span> FAQ <span className="bolt">⚡</span></h2>
-        </div>
+        <SectionHead index="03" title="FAQ" sub="straight answers, no fine print" />
         <div className="faq-frame arcade reveal">
           <div className="arcade-tab">Player&apos;s Manual</div>
           <div className="arcade-in">
@@ -864,13 +954,15 @@ export function LandingClient() {
         </div>
       </section>
 
-      {/* CTA + FOOTER */}
+      {/* CTA + FOOTER — the closing block joins the arcade frame system
+          instead of being the one big rounded rectangle on the page. */}
       <section className="footer-wrap container">
-        <div className="footer-block">
+        <div className="footer-block arcade">
+          <div className="arcade-in">
           <div className="cta-panel">
             <div className="about-card reveal">
               <h3>About <span className="pink">$PUMPBIRD</span></h3>
-              <p>$PUMPBIRD is the memecoin where skill meets degen. No promises. Just games. Just winners.</p>
+              <p>A memecoin with an actual game attached. Every $1 entry buys one life, feeds the pot, and gets replayed by the server before it counts. Skill gets paid.</p>
               <div className="about-meta">
                 <span className="lbl">Launching on</span>
                 <span className="val"><span className="pf-pill" /> pump.fun</span>
@@ -903,7 +995,16 @@ export function LandingClient() {
               <p className="cta-sub">Play for $1. Win everything.</p>
             </div>
             <div className="cta-bird-cell reveal">
-              <Image className="cta-bird" src={`${BASE_ASSETS}cta-bird-coins.png`} alt="" width={300} height={300} unoptimized />
+              {/* The coin-pile bird ships with a baked-in dark backdrop that
+                  used to seam against the footer panel. Seated in its own
+                  arcade frame, the backdrop becomes the screen it sits on —
+                  no art touched. */}
+              <div className="cta-bird-frame arcade">
+                <div className="arcade-in">
+                  <Image className="cta-bird" src={`${BASE_ASSETS}cta-bird-coins.png`} alt="" width={300} height={300} unoptimized />
+                  <span className="cta-bird-tag">sitting on the pot</span>
+                </div>
+              </div>
             </div>
           </div>
           <footer className="footer-bar">
@@ -918,13 +1019,14 @@ export function LandingClient() {
             </nav>
             <span className="footer-copy">© 2026 Pump.Bird. All rights reserved.</span>
           </footer>
+          </div>
         </div>
       </section>
 
       {/* MOBILE DRAWER */}
       <div className={`drawer${drawerOpen ? " open" : ""}`} aria-hidden={!drawerOpen}>
         <div className="drawer-scrim" onClick={() => setDrawerOpen(false)} />
-        <div className="drawer-panel" role="dialog" aria-modal="true" aria-label="Menu">
+        <div className="drawer-panel" role="dialog" aria-modal="true" aria-label="Menu" ref={drawerPanelRef}>
           <div className="drawer-top">
             <Image src={`${BASE_ASSETS}logo.png`} alt="PUMP.BIRD" width={120} height={32} unoptimized />
             <button className="drawer-close" type="button" aria-label="Close menu" onClick={() => setDrawerOpen(false)}>✕</button>
@@ -976,29 +1078,17 @@ const FaqList = memo(function FaqList() {
   );
 });
 
-function HowCard({
-  num,
-  title,
-  emblem,
-  body,
-  pink
-}: {
-  num: string;
-  title: string;
-  emblem: string;
-  body: string;
-  pink?: boolean;
-}) {
+// Section header — left-aligned title, a rule running out to the right and a
+// lowercase mono annotation, borrowed from /counter's section heads (the
+// strongest pattern in the project). Replaces the emoji-flanked centred
+// titles that read as template output.
+function SectionHead({ index, title, sub }: { index: string; title: string; sub: string }) {
   return (
-    <div className={`how-card arcade reveal${pink ? " pink" : ""}`}>
-      <div className="arcade-in">
-        <div className="how-head">
-          <span className="how-num">{num}</span>
-          <span className="how-title">{title}</span>
-        </div>
-        <Image className="emblem" src={`${BASE_ASSETS}${emblem}.png`} alt="" width={160} height={160} unoptimized />
-        <p>{body}</p>
-      </div>
+    <div className="section-head reveal">
+      <span className="sh-index" aria-hidden="true">{index}</span>
+      <h2 className="sh-title">{title}</h2>
+      <span className="sh-line" aria-hidden="true" />
+      <span className="sh-sub">↳ {sub}</span>
     </div>
   );
 }

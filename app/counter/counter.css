@@ -183,16 +183,21 @@ body:has(.ctr-root) {
   letter-spacing: 3px;
 }
 
-/* ─── Pot number — the signature moment ─── */
+/* ─── Pot number — the signature moment ───
+   A seven-digit odometer: dim placeholder zeros always fill the broadcast
+   frame, significant digits burn at full brightness. Font size comes inline
+   from RollingNumber (adapts to digit count); the clamp below is only a
+   no-JS fallback. */
 .ctr-pot-number {
   font-family: 'Space Grotesk', sans-serif;
   font-weight: 700;
-  font-size: clamp(140px, 17vw, 320px);
+  font-size: clamp(120px, 10.5vw, 208px);
   line-height: 0.9;
-  letter-spacing: -7px;
+  letter-spacing: -0.03em;
   color: var(--bp-pump);
   position: relative;
-  margin: 2px 0 8px;
+  margin: 4px 0 8px;
+  font-variant-numeric: tabular-nums;
   text-shadow:
     0 0 28px rgba(101, 255, 72, 0.55),
     0 0 64px rgba(101, 255, 72, 0.22);
@@ -206,7 +211,13 @@ body:has(.ctr-root) {
 .ctr-pot-number .ctr-pot-sep {
   display: inline-block;
   color: rgba(101, 255, 72, 0.55);
-  padding: 0 8px;
+  padding: 0 0.04em;
+}
+/* placeholder digits: readable structure, clearly not money yet */
+.ctr-pot-number .dim {
+  color: rgba(101, 255, 72, 0.20);
+  text-shadow: none;
+  animation: none;
 }
 @keyframes ctr-digit-roll {
   0% { transform: translateY(-1.1em); opacity: 0; }
@@ -214,12 +225,10 @@ body:has(.ctr-root) {
   100% { transform: translateY(0); opacity: 1; }
 }
 .ctr-pot-number.is-zero {
-  color: rgba(101, 255, 72, 0.35);
-  text-shadow: 0 0 18px rgba(101, 255, 72, 0.25);
-  animation: ctr-zero-pulse 2.4s ease-in-out infinite;
+  animation: ctr-zero-pulse 2.8s ease-in-out infinite;
 }
 @keyframes ctr-zero-pulse {
-  0%, 100% { opacity: 0.6; }
+  0%, 100% { opacity: 0.75; }
   50% { opacity: 1; }
 }
 
@@ -227,7 +236,7 @@ body:has(.ctr-root) {
   display: flex;
   align-items: center;
   gap: 18px;
-  margin-top: 14px;
+  margin-top: 10px;
   flex-wrap: wrap;
 }
 .ctr-pot-coin {
@@ -259,7 +268,8 @@ body:has(.ctr-root) {
 .ctr-pot-meta {
   display: flex;
   gap: 32px;
-  margin-top: 26px;
+  /* 26px used to push this line through the section divider at 1920x1080 */
+  margin-top: 14px;
   font-size: 12px;
   letter-spacing: 3px;
   color: rgba(242, 235, 216, 0.42);
@@ -284,12 +294,14 @@ body:has(.ctr-root) {
 }
 .ctr-mascot {
   position: absolute;
-  right: -20px;
-  bottom: -20px;
+  /* seated inside the frame — the old right:-20px sliced the coin/pill
+     details off the right edge in a way that read as accidental */
+  right: 16px;
+  bottom: -12px;
   width: auto;
   max-width: 760px;
-  height: 110%;
-  max-height: 720px;
+  height: 106%;
+  max-height: 700px;
   object-fit: contain;
   filter: drop-shadow(0 0 32px rgba(101, 255, 72, 0.45));
   animation: ctr-bird-bob 4s ease-in-out infinite;
@@ -420,18 +432,22 @@ body:has(.ctr-root) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: rgba(242, 235, 216, 0.35);
+  color: rgba(242, 235, 216, 0.4);
   font-family: 'Press Start 2P', monospace;
-  font-size: 11px;
-  letter-spacing: 3px;
+  /* 11px/3px letterspacing overran the 150px box on both sides */
+  font-size: 9px;
+  letter-spacing: 2px;
+  line-height: 1.8;
   text-align: center;
-  padding: 8px;
-  gap: 8px;
+  padding: 10px;
+  gap: 10px;
 }
-.ctr-king-empty::before {
-  content: '👑';
-  font-size: 28px;
-  opacity: 0.5;
+/* the crown sprite, grayscaled — not an OS emoji */
+.ctr-king-empty-ic {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  opacity: 0.45;
   filter: grayscale(1);
 }
 .ctr-king-crown {
@@ -467,6 +483,14 @@ body:has(.ctr-root) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* empty state speaks the page's own terminal voice — the proportional-sans
+   "— NO KING YET —" looked pasted in from another site */
+.ctr-king-name.is-empty {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 20px;
+  letter-spacing: 4px;
+  color: rgba(242, 235, 216, 0.55);
 }
 .ctr-king-wallet {
   font-family: 'IBM Plex Mono', monospace;

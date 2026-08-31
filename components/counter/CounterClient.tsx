@@ -119,17 +119,17 @@ export function CounterClient() {
 
   const tickerItems = useMemo(() => {
     const items: string[] = [
-      "PAY $1 — PLAY PUMP.BIRD",
-      "BEAT THE HIGH SCORE — TAKE THE POT",
+      "PAY $1 · PLAY PUMP.BIRD",
+      "BEAT THE HIGH SCORE · TAKE THE POT",
       "LIVE ON SOLANA",
       "WINNER TAKES EVERYTHING"
     ];
     if (quote?.tokenUsd != null) items.push(`$PUMPBIRD ${formatPrice(quote.tokenUsd)}`);
     if (quote?.solUsd != null) items.push(`SOL/USD $${formatPrice(quote.solUsd)}`);
     if (pot) items.push(`EPOCH ${pot.epoch}`);
-    if (pot) items.push(`${pot.totalEntries.toLocaleString("en-US")} ENTRIES PLAYED`);
+    if (pot) items.push(`${thousands(String(pot.totalEntries))} ENTRIES PLAYED`);
     if (pot && pot.allTimeHighScore > 0) {
-      items.push(`HIGH SCORE TO BEAT — ${pot.allTimeHighScore}`);
+      items.push(`HIGH SCORE TO BEAT · ${pot.allTimeHighScore}`);
     }
     items.push("BUILT ON PUMP.FUN");
     return items;
@@ -221,12 +221,17 @@ export function CounterClient() {
                 </>
               ) : (
                 <div className="ctr-king-empty">
-                  THRONE IS<br />EMPTY
+                  <img className="ctr-king-empty-ic" src={`${ASSETS}icon-crown.png`} alt="" />
+                  THRONE IS EMPTY
                 </div>
               )}
             </div>
             <div className="ctr-king-meta">
-              <div className="ctr-king-name">{championName ?? "— NO KING YET —"}</div>
+              {championName ? (
+                <div className="ctr-king-name">{championName}</div>
+              ) : (
+                <div className="ctr-king-name is-empty">NO KING YET</div>
+              )}
               <div className="ctr-king-wallet">
                 {champion?.wallet ? shortWallet(champion.wallet) : "first winner takes the crown"}
               </div>
@@ -252,8 +257,12 @@ export function CounterClient() {
             <span className="ctr-line" />
             <span className="ctr-board-sub">↳ live data</span>
           </div>
+          {/* Five rows, no duplicates: POT VAL repeated the hero's USD line
+              and ORACLE repeated the hero meta — seven rows also overflowed
+              the 320px band at the 1920x1080 design resolution, slicing the
+              bottom row in half. */}
           <DataRow k="HIGH SCORE" v={String(pot?.allTimeHighScore ?? 0)} accent="pink" />
-          <DataRow k="ENTRIES" v={(pot?.totalEntries ?? 0).toLocaleString("en-US")} />
+          <DataRow k="ENTRIES" v={thousands(String(pot?.totalEntries ?? 0))} />
           <DataRow
             k="BURN POOL"
             v={pot ? formatTokenInt(pot.treasuryTokenAmount, quote?.tokenDecimals ?? 6) : "0"}
@@ -267,12 +276,6 @@ export function CounterClient() {
             accent="pump"
           />
           <DataRow k="SOL / USD" v={quote?.solUsd != null ? formatPrice(quote.solUsd) : "—"} unit="$" />
-          <DataRow
-            k="POT VAL"
-            v={potUsdDisplay !== null ? formatUsd(potUsdDisplay) : "$0.00"}
-            accent="pump"
-          />
-          <DataRow k="ORACLE" v={(quote?.priceSource ?? "WAITING").toString().toUpperCase()} />
         </div>
       </section>
 
@@ -286,8 +289,10 @@ export function CounterClient() {
         <div className="ctr-board-cards">
           {board.length === 0 && (
             <div className="ctr-board-empty">
-              <img src={`${ASSETS}emblem-takepot.png`} alt="" className="ctr-empty-emblem" />
-              <span>NO ENTRIES YET — POT IS WAITING — PAY $1 — TAKE IT</span>
+              {/* the coin, not the step-4 emblem — that one carries a baked-in
+                  "4" badge that floated meaninglessly in the empty state */}
+              <img src={`${ASSETS}icon-coin.png`} alt="" className="ctr-empty-emblem" />
+              <span>NO ENTRIES YET · POT IS WAITING · PAY $1 · TAKE IT</span>
             </div>
           )}
           {board.slice(0, 5).map((row, i) => {
@@ -341,6 +346,13 @@ export function CounterClient() {
 }
 
 // ─── RollingNumber ───
+// Slot-machine odometer: the pot is padded to at least seven digits with DIM
+// leading zeros, so the counter always spans the broadcast frame. A lone "0"
+// used to leave ~25% of the 1920x1080 frame empty black and read like a
+// watermark; now the zero state is an odometer at rest and a live pot lights
+// its digits up left to right. Font size adapts so bigger pots never clip.
+const MIN_ODOMETER_DIGITS = 7;
+
 function RollingNumber({
   value,
   decimals,
@@ -351,18 +363,31 @@ function RollingNumber({
   isZero: boolean;
 }) {
   const display = formatTokenInt(value, decimals);
-  const [chars, setChars] = useState<string[]>(display.split(""));
-  useEffect(() => setChars(display.split("")), [display]);
+  const digitCount = display.replace(/\D/g, "").length;
+  const padCount = Math.max(0, MIN_ODOMETER_DIGITS - digitCount);
+  const padded = thousands("0".repeat(padCount) + display.replace(/\D/g, ""));
+  // Everything left of the significant part renders dim (zero pot: all dim).
+  const liveFrom = isZero ? padded.length : padded.length - display.length;
+  const chars = padded.split("");
+  // ~0.55em per glyph in Space Grotesk bold; cap so 7-digit pots hit 208px at
+  // 1920 wide and longer pots scale down instead of clipping. vh/vw guards
+  // keep laptop and sub-1280 layouts intact (they used to rely on media
+  // queries that an inline font-size would override).
+  const fontPx = Math.min(208, Math.floor(1880 / chars.length));
 
   return (
-    <div className={`ctr-pot-number${isZero ? " is-zero" : ""}`}>
-      {chars.map((ch, i) =>
-        /\d/.test(ch) ? (
-          <span key={`d-${i}-${ch}`} className="ctr-pot-digit">{ch}</span>
+    <div
+      className={`ctr-pot-number${isZero ? " is-zero" : ""}`}
+      style={{ fontSize: `min(${fontPx}px, 19vh, 12.5vw)` }}
+    >
+      {chars.map((ch, i) => {
+        const dim = i < liveFrom ? " dim" : "";
+        return /\d/.test(ch) ? (
+          <span key={`d-${i}-${ch}`} className={`ctr-pot-digit${dim}`}>{ch}</span>
         ) : (
-          <span key={`s-${i}`} className="ctr-pot-sep">{ch}</span>
-        )
-      )}
+          <span key={`s-${i}`} className={`ctr-pot-sep${dim}`}>{ch}</span>
+        );
+      })}
     </div>
   );
 }
@@ -400,12 +425,18 @@ function shortWallet(s: string): string {
   return s.slice(0, 4) + "…" + s.slice(-4);
 }
 
+// Deterministic thousands separator — toLocaleString depends on the
+// runtime's ICU data; a pure regex renders identically on server and client.
+function thousands(intStr: string): string {
+  return intStr.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 function formatTokenInt(raw: string, decimals: number): string {
   try {
     const big = BigInt(raw);
     const div = BigInt(10) ** BigInt(decimals);
     const whole = big / div;
-    return whole.toLocaleString("en-US");
+    return thousands(whole.toString());
   } catch {
     return "0";
   }
@@ -419,7 +450,9 @@ function formatPrice(n: number): string {
 }
 
 function formatUsd(n: number): string {
-  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fixed = n.toFixed(2);
+  const dot = fixed.indexOf(".");
+  return "$" + thousands(fixed.slice(0, dot)) + fixed.slice(dot);
 }
 
 function formatRelative(ts: number): string {

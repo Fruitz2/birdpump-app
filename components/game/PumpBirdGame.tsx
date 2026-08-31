@@ -18,7 +18,7 @@
 //     position between the previous and next state to make the motion smooth
 //     even at non-multiple-of-40Hz displays.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   createInitialState,
   stepGame,
@@ -237,6 +237,31 @@ export function toggleGlobalSound(): boolean {
   return next;
 }
 
+function subscribeSound(cb: () => void): () => void {
+  window.addEventListener(SOUND_EVENT, cb);
+  window.addEventListener("storage", cb);
+  return () => {
+    window.removeEventListener(SOUND_EVENT, cb);
+    window.removeEventListener("storage", cb);
+  };
+}
+
+/**
+ * Hydration-safe view of the sound pref. The naive pattern —
+ * `useState(true)` corrected from localStorage in a mount effect — races
+ * hydration on statically prerendered routes: with "0" stored, the setState
+ * lands while the route's Suspense boundary is still hydrating, React
+ * client-renders the boundary with the NEW state, the "♪" glyph no longer
+ * matches the server HTML and React throws minified #418 and regenerates the
+ * whole tree (reproduced on /play-fun in the production build).
+ * useSyncExternalStore is the designed escape hatch: the server snapshot
+ * (always true) is used during hydration so the markup matches, then React
+ * re-reads the client snapshot AFTER hydration as a plain update.
+ */
+export function useSoundPref(): boolean {
+  return useSyncExternalStore(subscribeSound, readSoundPref, () => true);
+}
+
 const PARTICLE_POOL = 200;
 const IDLE_SPRITE_URL = "/assets/game/pump-bird-idle.png";
 const DEAD_SPRITE_URL = "/assets/game/pump-bird-dead.png";
@@ -269,25 +294,13 @@ export function PumpBirdGame({
   // once we measure the viewport. (Initial render before measurement has w=0.)
   const [size, setSize] = useState({ w: 0, h: 0 });
   // Sound on/off — persists across sessions via localStorage. The pref is
-  // global (see readSoundPref/setGlobalSound above); this state only mirrors
-  // it so the button glyph re-renders. All toggles go through
-  // toggleGlobalSound so the landing header button stays in sync.
-  // Server-safe default, corrected from localStorage on mount. Reading storage in the
-  // initialiser makes the server and client render different text, which React reports
-  // as hydration error #418 and repairs by throwing away the SSR markup.
-  const [soundOn, setSoundOn] = useState<boolean>(true);
-  useEffect(() => { setSoundOn(readSoundPref()); }, []);
+  // global (see useSoundPref above); the store hook keeps the glyph in sync
+  // with the landing header button, the M key and other game instances
+  // WITHOUT the setState-during-hydration race the old mount-effect had.
+  const soundOn = useSoundPref();
   useEffect(() => {
     sharedAudio.setEnabled(soundOn);
   }, [soundOn]);
-  useEffect(() => {
-    const onSound = (e: Event) => {
-      const on = (e as CustomEvent<{ on: boolean }>).detail?.on;
-      if (typeof on === "boolean") setSoundOn(on);
-    };
-    window.addEventListener(SOUND_EVENT, onSound);
-    return () => window.removeEventListener(SOUND_EVENT, onSound);
-  }, []);
   const sizeRef = useRef({ w: 0, h: 0 });
   const idleSpriteRef = useRef<HTMLImageElement | HTMLCanvasElement | null>(null);
   const deadSpriteRef = useRef<HTMLImageElement | HTMLCanvasElement | null>(null);
@@ -955,8 +968,8 @@ export function PumpBirdGame({
             top: 10,
             left: 10,
             zIndex: 70,
-            width: 32,
-            height: 32,
+            width: 44,
+            height: 44,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -965,7 +978,7 @@ export function PumpBirdGame({
             color: "#00ff41",
             textShadow: "0 0 6px #00ff41",
             fontFamily: "'Press Start 2P', monospace",
-            fontSize: 12,
+            fontSize: 13,
             cursor: "pointer",
             padding: 0
           }}
@@ -984,11 +997,11 @@ export function PumpBirdGame({
           title={soundOn ? "Mute (M)" : "Unmute (M)"}
           style={{
             position: "absolute",
-            top: 50,
+            top: 62,
             left: 10,
             zIndex: 70,
-            width: 32,
-            height: 32,
+            width: 44,
+            height: 44,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -997,7 +1010,7 @@ export function PumpBirdGame({
             color: "#00ff41",
             textShadow: "0 0 6px #00ff41",
             fontFamily: "'Press Start 2P', monospace",
-            fontSize: 12,
+            fontSize: 13,
             cursor: "pointer",
             padding: 0
           }}
@@ -1011,7 +1024,7 @@ export function PumpBirdGame({
             style={{
               position: "absolute",
               top: 16,
-              left: 60,
+              left: 66,
               right: 16,
               display: "flex",
               justifyContent: "space-between",
@@ -1050,7 +1063,10 @@ export function PumpBirdGame({
             style={{
               position: "absolute",
               inset: 0,
-              background: "rgba(3,10,3,0.9)",
+              // Light dim, not a blackout — the city, signs and the bobbing
+              // bird stay visible behind the menu so the first impression is
+              // a live arcade screen, not an empty dark rectangle.
+              background: "rgba(3,10,3,0.68)",
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
@@ -1060,8 +1076,8 @@ export function PumpBirdGame({
               textAlign: "center"
             }}
           >
-            <div style={{ fontSize: 10, color: "#00ff41", textShadow: "0 0 8px #00ff41", marginBottom: 10 }}>
-              💊 pump.fun
+            <div style={{ fontSize: 9, color: "#00ff41", textShadow: "0 0 8px #00ff41", marginBottom: 12, letterSpacing: 2 }}>
+              ▚ PUMP.FUN ARCADE ▞
             </div>
             <div
               style={{

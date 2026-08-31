@@ -22,7 +22,6 @@
   --maxw:1320px;
   --pad:clamp(20px,5vw,40px);
   --sect:clamp(54px,8vw,96px);
-  --radius-btn:11px;
 
   --ff-display:"Saira Condensed",system-ui,sans-serif;
   --ff-num:"Oxanium",system-ui,sans-serif;
@@ -40,6 +39,12 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 ul{list-style:none}
 ::selection{background:var(--green);color:#04130a}
 :focus-visible{outline:2px solid var(--green);outline-offset:3px;border-radius:4px}
+/* clip-path clips the outline too — chamfered controls signal focus with an
+   inset ring instead so keyboard users never lose the indicator */
+.btn:focus-visible,.btn-wallet:focus-visible,.btn-icon:focus-visible,
+.hamburger:focus-visible,.drawer-close:focus-visible{
+  outline:none;box-shadow:inset 0 0 0 3px rgba(255,255,255,.9)}
+.btn-primary:focus-visible{box-shadow:inset 0 0 0 3px #04130a}
 ::-webkit-scrollbar{width:11px;height:11px}
 ::-webkit-scrollbar-track{background:#04080a}
 ::-webkit-scrollbar-thumb{background:#1d2a22;border:2px solid #04080a;border-radius:10px}
@@ -65,16 +70,22 @@ section[id]{scroll-margin-top:76px}
 
 /* ============================================================
    ARCADE FRAME SYSTEM  (the signature visual language)
-   notched-corner dark-metal panel + neon edge + corner bolts
+   notched-corner dark-metal panel + corner bolts.
+   Neutral gunmetal by DEFAULT — glow is rationed: `.hot` (green) is
+   reserved for the live pot, `.pink` for the game screen / champion.
+   When everything glows, nothing reads as important.
    ============================================================ */
-.arcade{--c:var(--green);--c2:var(--pink);--cut:16px;position:relative;padding:2px;
-  background:linear-gradient(135deg,var(--c),var(--c2) 55%,var(--c));
+/* the notched border ring lives on ::before so the straddling tab (a child
+   that pokes 17px above the frame) is never sliced by the clip-path */
+.arcade{--cut:16px;position:relative;padding:2px}
+.arcade::before{content:"";position:absolute;inset:0;
+  background:linear-gradient(135deg,#46544b,#232b28 45%,#3a473f 80%,#2b3530);
   clip-path:polygon(var(--cut) 0,calc(100% - var(--cut)) 0,100% var(--cut),100% calc(100% - var(--cut)),
-    calc(100% - var(--cut)) 100%,var(--cut) 100%,0 calc(100% - var(--cut)),0 var(--cut));
+    calc(100% - var(--cut)) 100%,var(--cut) 100%,0 calc(100% - var(--cut)),0 var(--cut))}
+.arcade.hot::before{background:linear-gradient(135deg,var(--green),var(--pink) 55%,var(--green));
   filter:drop-shadow(0 0 11px rgba(145,255,0,.30)) drop-shadow(0 0 24px rgba(145,255,0,.10))}
-.arcade.pink{background:linear-gradient(135deg,var(--pink),var(--green) 60%,var(--pink));
-  filter:drop-shadow(0 0 11px rgba(255,47,155,.32)) drop-shadow(0 0 24px rgba(255,47,155,.10))}
-.arcade.dim{filter:drop-shadow(0 0 8px rgba(145,255,0,.18))}
+.arcade.pink::before{background:linear-gradient(135deg,var(--pink),#3a2c35 55%,var(--pink));
+  filter:drop-shadow(0 0 8px rgba(255,47,155,.20))}
 .arcade-in{--cut:14px;position:relative;height:100%;
   clip-path:polygon(var(--cut) 0,calc(100% - var(--cut)) 0,100% var(--cut),100% calc(100% - var(--cut)),
     calc(100% - var(--cut)) 100%,var(--cut) 100%,0 calc(100% - var(--cut)),0 var(--cut));
@@ -84,39 +95,61 @@ section[id]{scroll-margin-top:76px}
     radial-gradient(circle at 11px calc(100% - 11px),#646b70 0 2.4px,transparent 3px),
     radial-gradient(circle at calc(100% - 11px) calc(100% - 11px),#646b70 0 2.4px,transparent 3px),
     linear-gradient(162deg,#0e1817,#070d0c 60%,#0a1211)}
-/* tab header that straddles the top edge */
+/* tab header that straddles the top edge. Neutral frames get a quiet steel
+   tab; the hot vault keeps the glowing green one. */
 .arcade-tab{position:absolute;top:-17px;left:50%;transform:translateX(-50%);z-index:4;
-  background:linear-gradient(180deg,#0d1615,#070d0c);border:2px solid var(--green);border-bottom:none;
-  box-shadow:0 0 15px rgba(145,255,0,.5),inset 0 0 12px rgba(145,255,0,.14);
+  background:linear-gradient(180deg,#141b18,#0a100e);border:2px solid #46544b;border-bottom:none;
   padding:.4rem 1.6rem;clip-path:polygon(0 0,100% 0,calc(100% - 13px) 100%,13px 100%);
   font-family:var(--ff-display);font-weight:800;letter-spacing:.16em;text-transform:uppercase;
-  color:var(--green);font-size:1.25rem;line-height:1;display:flex;align-items:center;gap:.5rem;white-space:nowrap}
-.arcade-tab.pink{border-color:var(--pink);box-shadow:0 0 15px rgba(255,47,155,.5),inset 0 0 12px rgba(255,47,155,.14)}
+  color:#b9cabb;font-size:1.25rem;line-height:1;display:flex;align-items:center;gap:.5rem;white-space:nowrap}
+.arcade.hot>.arcade-tab{border-color:var(--green);color:var(--green);
+  background:linear-gradient(180deg,#0d1615,#070d0c);
+  box-shadow:0 0 15px rgba(145,255,0,.5),inset 0 0 12px rgba(145,255,0,.14)}
+.arcade-tab.pink{border-color:var(--pink);color:var(--pink);
+  background:linear-gradient(180deg,#0d1615,#070d0c);
+  box-shadow:0 0 12px rgba(255,47,155,.35),inset 0 0 12px rgba(255,47,155,.1)}
 .arcade-tab img{height:24px;width:auto;display:block}
 
-/* ---------- type helpers ---------- */
-.section-title{font-family:var(--ff-display);font-weight:800;text-transform:uppercase;letter-spacing:.06em;
-  font-size:clamp(1.9rem,4.4vw,3rem);line-height:.95;text-align:center;color:var(--green);
-  text-shadow:0 0 22px rgba(145,255,0,.4);display:inline-flex;align-items:center;gap:.7rem;justify-content:center}
-.section-title .bolt{color:var(--gold);font-family:var(--ff-ui);font-weight:900;font-size:.7em;
-  text-shadow:0 0 14px rgba(255,200,61,.6)}
-.title-wrap{text-align:center;margin-bottom:clamp(1.8rem,4vw,2.8rem)}
+/* ---------- section heads ----------
+   Left-aligned title, rule running out to the right, lowercase mono
+   annotation — the /counter section-head language brought to the landing.
+   Replaces the emoji-flanked centred titles. */
+.section-head{display:flex;align-items:baseline;gap:1rem;
+  margin-bottom:clamp(1.6rem,3.6vw,2.5rem)}
+.sh-index{font-family:var(--ff-pixel);font-size:.72rem;color:var(--pink);
+  text-shadow:0 0 8px rgba(255,47,155,.4);transform:translateY(-2px)}
+.sh-title{font-family:var(--ff-display);font-weight:800;text-transform:uppercase;letter-spacing:.05em;
+  font-size:clamp(1.7rem,3.8vw,2.6rem);line-height:.95;color:var(--white);white-space:nowrap}
+.sh-line{flex:1;height:1px;align-self:center;min-width:40px;
+  background:linear-gradient(90deg,rgba(145,255,0,.45),rgba(145,255,0,.08) 70%,transparent)}
+.sh-sub{font-family:"IBM Plex Mono",monospace;font-size:.76rem;letter-spacing:.14em;
+  color:rgba(145,255,0,.6);white-space:nowrap}
+@media (max-width:680px){
+  .section-head{flex-wrap:wrap;row-gap:.3rem}
+  .sh-line{order:3;flex-basis:100%;min-width:0}
+  .sh-sub{order:4}
+}
 .green{color:var(--green)}.pink{color:var(--pink)}.gold{color:var(--gold)}
 
-/* ---------- buttons ---------- */
+/* ---------- buttons ----------
+   Same chamfer as the header wallet button — one corner language on the
+   page. Glow moves from box-shadow to drop-shadow so it follows the cut,
+   and the primary CTA keeps the only always-on green glow besides the pot. */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5em;font-family:var(--ff-ui);
-  font-weight:700;text-transform:uppercase;letter-spacing:.08em;border-radius:var(--radius-btn);
-  transition:transform .15s ease,box-shadow .25s ease,background .2s ease;white-space:nowrap;line-height:1}
-.btn-primary{background:var(--green);color:#04130a;padding:.95em 1.5em;font-size:1rem;
-  border:1px solid rgba(180,255,90,.9);
-  box-shadow:0 0 0 1px rgba(145,255,0,.55),0 8px 26px -8px rgba(145,255,0,.6)}
+  font-weight:700;text-transform:uppercase;letter-spacing:.08em;min-height:44px;
+  clip-path:polygon(10px 0,100% 0,calc(100% - 10px) 100%,0 100%);
+  transition:transform .15s ease,filter .25s ease,background .2s ease,box-shadow .25s ease;
+  white-space:nowrap;line-height:1}
+.btn-primary{background:var(--green);color:#04130a;padding:.95em 1.7em;font-size:1rem;
+  border:none;filter:drop-shadow(0 6px 18px rgba(145,255,0,.4))}
 .btn-primary:hover{transform:translateY(-2px);background:#a6ff1f;
-  box-shadow:0 0 0 1px rgba(145,255,0,.9),0 12px 34px -6px rgba(145,255,0,.85)}
+  filter:drop-shadow(0 10px 26px rgba(145,255,0,.6))}
 .btn-primary:active{transform:translateY(0)}
-.btn-ghost{background:rgba(8,16,15,.7);color:var(--white);padding:.9em 1.4em;font-size:.95rem;
-  border:1px solid rgba(255,255,255,.2)}
-.btn-ghost:hover{border-color:var(--green);color:var(--green);box-shadow:0 0 22px -6px rgba(145,255,0,.5)}
-.btn.sm{padding:.62em 1.05em;font-size:.78rem}
+.btn-ghost{background:rgba(8,16,15,.7);color:var(--white);padding:.9em 1.6em;font-size:.95rem;
+  border:1px solid rgba(255,255,255,.25)}
+.btn-ghost:hover{border-color:var(--green);color:var(--green);
+  filter:drop-shadow(0 0 14px rgba(145,255,0,.35))}
+.btn.sm{padding:.62em 1.2em;font-size:.78rem}
 .btn.big{padding:1.1em 2em;font-size:1.15rem;width:100%}
 
 /* ============================================================ HEADER ============================================================ */
@@ -127,13 +160,13 @@ section[id]{scroll-margin-top:76px}
 .brand img{height:50px;width:auto}
 .nav-desktop{display:flex;gap:clamp(1rem,2.4vw,2.1rem);align-items:center}
 .nav-desktop a{font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-size:.82rem;color:var(--muted);
-  padding:6px 0;position:relative;transition:color .18s ease}
+  padding:15px 0;position:relative;transition:color .18s ease}
 .nav-desktop a:hover{color:var(--white)}
 .nav-desktop a.active{color:var(--green)}
-.nav-desktop a.active::after{content:"";position:absolute;left:0;right:0;bottom:-2px;height:2px;
+.nav-desktop a.active::after{content:"";position:absolute;left:0;right:0;bottom:9px;height:2px;
   background:var(--green);box-shadow:0 0 10px rgba(145,255,0,.9)}
 .nav-desktop a.nav-social{display:inline-flex;align-items:center;justify-content:center;
-  width:38px;height:38px;color:rgba(255,255,255,.65);padding:0;border-radius:50%;
+  width:44px;height:44px;color:rgba(255,255,255,.65);padding:0;border-radius:50%;
   border:1px solid rgba(255,255,255,.1);transition:color .2s,border-color .2s,background .2s}
 .nav-desktop a.nav-social:hover{color:var(--green);border-color:var(--green);
   background:rgba(145,255,0,.08);box-shadow:0 0 14px rgba(145,255,0,.35)}
@@ -165,10 +198,22 @@ section[id]{scroll-margin-top:76px}
 .hero-title{width:100%;max-width:780px;height:auto;margin-bottom:.6rem;
   filter:drop-shadow(0 6px 26px rgba(145,255,0,.2))}
 .hero-headline{font-family:var(--ff-display);font-weight:800;text-transform:uppercase;line-height:.84;
-  letter-spacing:.01em;font-size:clamp(2.6rem,6.2vw,5rem);margin-bottom:1.05rem}
+  letter-spacing:.01em;font-size:clamp(2.6rem,6.2vw,5rem);margin-bottom:1.15rem}
 .hero-headline .w{display:block;color:var(--white)}
 .hero-headline .g{display:block;color:var(--green);text-shadow:0 0 26px rgba(145,255,0,.45)}
-.hero-body{color:#c4ccca;font-size:clamp(1rem,1.35vw,1.16rem);font-weight:500;max-width:40ch;margin-bottom:1.5rem}
+/* the live pot, above the fold at display scale — the screenshot number */
+.hero-pot{display:flex;flex-direction:column;gap:.15rem;margin-bottom:1.45rem;
+  padding-left:.9rem;border-left:3px solid rgba(145,255,0,.55)}
+.hero-pot .hp-label{display:inline-flex;align-items:center;gap:.45rem;font-weight:700;
+  letter-spacing:.22em;text-transform:uppercase;font-size:.68rem;color:var(--muted)}
+.hero-pot .hp-label .led{width:8px;height:8px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 9px var(--green);animation:ledpulse 1.4s ease-in-out infinite}
+.hero-pot .hp-value{font-family:var(--ff-num);font-weight:800;color:var(--green);
+  font-size:clamp(2.7rem,6vw,4.4rem);line-height:1.04;font-variant-numeric:tabular-nums;
+  text-shadow:0 0 30px rgba(145,255,0,.35)}
+.hero-pot .hp-value.zero{color:rgba(145,255,0,.62);text-shadow:0 0 18px rgba(145,255,0,.2)}
+.hero-pot .hp-sub{font-family:"IBM Plex Mono",monospace;font-size:.76rem;letter-spacing:.1em;
+  color:rgba(217,255,214,.55)}
 .hero-cta{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1.4rem}
 .hero-cta .btn{padding:1.12em 2em;font-size:1.16rem;letter-spacing:.09em}
 .built-on{display:flex;align-items:center;gap:.55rem;color:var(--muted);font-weight:700;
@@ -178,29 +223,6 @@ section[id]{scroll-margin-top:76px}
   background:linear-gradient(90deg,#5be37f 50%,#e8f5ec 50%);border:1.5px solid #05100a;transform:rotate(-28deg)}
 
 .hero-right{position:relative;display:flex;justify-content:center;align-items:center;min-height:360px}
-.hero-fx{display:none}
-.hero-fx .burst{position:absolute;inset:0;
-  background:radial-gradient(circle at 50% 52%,rgba(145,255,0,.4),rgba(145,255,0,.12) 34%,transparent 62%)}
-.hero-fx .glow2{position:absolute;inset:0;
-  background:radial-gradient(40% 50% at 86% 24%,rgba(255,47,155,.22),transparent 60%),
-            radial-gradient(46% 48% at 14% 80%,rgba(34,244,255,.16),transparent 60%),
-            radial-gradient(36% 40% at 90% 84%,rgba(153,69,255,.2),transparent 62%)}
-.hero-fx .grid{position:absolute;inset:0;opacity:.5;
-  background-image:linear-gradient(rgba(145,255,0,.16) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(145,255,0,.16) 1px,transparent 1px);
-  background-size:38px 38px;
-  -webkit-mask-image:radial-gradient(circle at 50% 52%,#000 6%,transparent 60%);
-  mask-image:radial-gradient(circle at 50% 52%,#000 6%,transparent 60%)}
-.hero-fx .streak{position:absolute;height:2px;border-radius:2px;filter:blur(.4px);opacity:.6}
-.hero-fx .s1{width:48%;top:30%;left:6%;background:linear-gradient(90deg,transparent,var(--green));transform:rotate(-18deg)}
-.hero-fx .s2{width:40%;top:66%;left:16%;background:linear-gradient(90deg,transparent,var(--pink));transform:rotate(-14deg)}
-.hero-fx .s3{width:30%;top:48%;left:2%;background:linear-gradient(90deg,transparent,var(--cyan));transform:rotate(-22deg);opacity:.4}
-.hero-fx .spark{position:absolute;width:3px;height:3px;border-radius:50%;background:var(--green);
-  box-shadow:0 0 6px 1px var(--green)}
-.hero-fx .spark:nth-child(6){top:24%;left:30%}
-.hero-fx .spark:nth-child(7){top:70%;left:40%;background:var(--pink);box-shadow:0 0 6px 1px var(--pink)}
-.hero-fx .spark:nth-child(8){top:38%;left:18%}
-.hero-fx .spark:nth-child(9){top:80%;left:64%;background:var(--cyan);box-shadow:0 0 6px 1px var(--cyan)}
 .hero-bird{position:relative;z-index:1;width:min(108%,640px);height:auto;
   filter:drop-shadow(0 22px 40px rgba(0,0,0,.55));animation:float 5.5s ease-in-out infinite}
 @keyframes float{0%,100%{transform:translateY(-10px)}50%{transform:translateY(12px)}}
@@ -214,8 +236,6 @@ section[id]{scroll-margin-top:76px}
 .lightning.l2{top:28%;right:9%;transform:rotate(12deg) scale(1.05);animation:flash 8.2s 3.6s infinite}
 .lightning.l3{bottom:9%;left:31%;transform:rotate(-4deg) scale(.62);animation:flash 9.4s 5.9s infinite}
 @keyframes flash{0%,90%,100%{opacity:0}91%{opacity:.95}92.5%{opacity:.15}94%{opacity:.8}95.5%{opacity:0}}
-.section-title .bolt,.ticker-track .bolt{animation:boltflick 3.6s ease-in-out infinite}
-@keyframes boltflick{0%,100%{opacity:1}47%{opacity:.55}49%{opacity:1;text-shadow:0 0 16px currentColor}51%{opacity:.7}}
 
 /* ============================================================ TICKER ============================================================ */
 .ticker{overflow:hidden;background:#04080a;border-block:1px solid rgba(145,255,0,.16);position:relative}
@@ -228,36 +248,17 @@ section[id]{scroll-margin-top:76px}
   font-size:.72rem;letter-spacing:.02em}
 .ticker-track .item.g{color:var(--green)}
 .ticker-track .item.p{color:var(--pink)}
-.ticker-track .bolt{color:var(--gold);font-size:1.05rem;font-family:var(--ff-ui);font-weight:900}
-.ticker-track img{height:24px;width:auto}
+.ticker-track img{height:22px;width:auto}
 @keyframes ticker{to{transform:translateX(-50%)}}
 
 /* ============================================================ ARENA ============================================================ */
-.arena{display:grid;grid-template-columns:1fr minmax(310px,372px);gap:1.4rem;
-  padding-top:var(--sect);padding-bottom:var(--sect);align-items:stretch}
+.arena{display:grid;grid-template-columns:minmax(0,600px) minmax(310px,372px);gap:2rem;
+  justify-content:center;padding-top:var(--sect);padding-bottom:var(--sect);align-items:stretch}
 .arena-main{display:flex;flex-direction:column;gap:1.4rem;min-width:0}
 
-/* stat bar */
-.statbar .arcade-in{display:grid;grid-template-columns:1fr 1fr 1.25fr;align-items:center;padding:1.05rem 1.4rem}
-.stat{display:flex;flex-direction:column;gap:.25rem;padding-inline:1.2rem;position:relative}
-.stat+.stat{border-left:1px solid rgba(145,255,0,.16)}
-.stat-label{font-weight:700;letter-spacing:.16em;text-transform:uppercase;font-size:.66rem;color:var(--muted)}
-.stat-val{font-family:var(--ff-num);font-weight:700;font-size:clamp(1.3rem,2.3vw,1.8rem);line-height:1;
-  font-variant-numeric:tabular-nums}
-.stat-pot{display:flex;align-items:baseline;gap:.5rem}
-.stat .live{font-family:var(--ff-pixel);font-size:.5rem;color:var(--green);letter-spacing:.04em;
-  display:inline-flex;align-items:center;gap:.35rem}
-.stat .live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green);
-  box-shadow:0 0 8px var(--green);animation:ledpulse 1.4s ease-in-out infinite}
-.stat-val.champ{display:inline-flex;align-items:center;gap:.5rem}
-.stat-val.champ img{height:30px;width:auto;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
-.pot.bump{animation:potpulse .6s ease}
-@keyframes potpulse{0%{text-shadow:0 0 0 rgba(145,255,0,0);transform:scale(1)}
-  40%{text-shadow:0 0 26px rgba(145,255,0,.7);transform:scale(1.04)}
-  100%{text-shadow:0 0 14px rgba(145,255,0,.25);transform:scale(1)}}
-
-/* game cabinet */
-.game-arena{--cut:20px}
+/* game cabinet — sized to its screen like a real cabinet, not a full-width
+   slab with dark dead zones flanking a narrow playfield */
+.game-arena{--cut:20px;width:min(100%,560px);margin-inline:auto}
 .game-arena .arcade-in{padding:30px 18px 22px}
 .game-marquee{position:absolute;top:-19px;left:50%;transform:translateX(-50%);z-index:5}
 /* Game-screen sized to the 9:16 portrait playfield. max-width keeps the
@@ -307,14 +308,16 @@ section[id]{scroll-margin-top:76px}
   background:linear-gradient(180deg,rgba(255,255,255,.14),transparent 30%),
     repeating-linear-gradient(to bottom,rgba(0,0,0,.06) 0 2px,transparent 2px 4px)}
 #pumpbird-game-root.armed{box-shadow:0 0 30px rgba(145,255,0,.8),inset 0 0 0 2px var(--green)}
-/* play / buy-in bar under the game */
+/* play / buy-in bar under the game — notched corners, not a rounded rect */
 .play-bar{display:flex;flex-direction:column;align-items:center;gap:.65rem;text-align:center;
-  background:linear-gradient(180deg,rgba(145,255,0,.06),transparent);border:1px solid rgba(145,255,0,.2);
-  border-radius:14px;padding:1.15rem 1.2rem}
+  width:min(100%,560px);margin-inline:auto;
+  background:linear-gradient(180deg,rgba(145,255,0,.06),rgba(0,0,0,.25));border:1px solid rgba(145,255,0,.2);
+  clip-path:polygon(14px 0,calc(100% - 14px) 0,100% 14px,100% calc(100% - 14px),
+    calc(100% - 14px) 100%,14px 100%,0 calc(100% - 14px),0 14px);
+  padding:1.15rem 1.2rem}
 .play-bar .btn.big{max-width:560px;padding:1.15em 2em;font-size:1.2rem}
 .play-meta{font-family:var(--ff-ui);font-weight:700;letter-spacing:.05em;text-transform:uppercase;
   font-size:.82rem;color:var(--muted);display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:center}
-.play-meta [data-play-amt]{font-family:var(--ff-num);font-weight:800;font-size:1rem}
 .play-meta .pm-live{display:inline-flex;align-items:center;gap:.4rem;color:var(--green)}
 .play-meta .pm-live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green);
   box-shadow:0 0 8px var(--green);animation:ledpulse 1.4s ease-in-out infinite}
@@ -349,51 +352,63 @@ section[id]{scroll-margin-top:76px}
 .hinge{position:absolute;right:-15%;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:7px}
 .hinge i{width:14px;height:28px;border-radius:5px;background:linear-gradient(90deg,#2a3034,#7c858a 45%,#2a3034);
   box-shadow:0 2px 5px rgba(0,0,0,.6)}
-.vault-pot{background:rgba(0,0,0,.42);border:1px solid rgba(145,255,0,.18);border-radius:12px;
+.vault-pot{background:rgba(0,0,0,.42);border:1px solid rgba(145,255,0,.18);
+  clip-path:polygon(11px 0,calc(100% - 11px) 0,100% 11px,100% calc(100% - 11px),
+    calc(100% - 11px) 100%,11px 100%,0 calc(100% - 11px),0 11px);
   padding:.85rem 1rem;text-align:center}
 .vault-pot .label{display:block;font-weight:700;letter-spacing:.18em;text-transform:uppercase;
   font-size:.64rem;color:var(--muted);margin-bottom:.3rem}
 .vault-pot .big-pot{font-family:var(--ff-num);font-weight:800;color:var(--green);
   font-size:clamp(1.9rem,4.6vw,2.6rem);line-height:1;font-variant-numeric:tabular-nums}
 .vault-grid{display:grid;grid-template-columns:1fr 1fr;gap:.7rem}
-.vault-cell{background:rgba(0,0,0,.42);border:1px solid rgba(255,255,255,.08);border-radius:11px;
+.vault-cell{background:rgba(0,0,0,.42);border:1px solid rgba(255,255,255,.08);
+  clip-path:polygon(9px 0,calc(100% - 9px) 0,100% 9px,100% calc(100% - 9px),
+    calc(100% - 9px) 100%,9px 100%,0 calc(100% - 9px),0 9px);
   padding:.7rem .55rem;text-align:center}
 .vault-cell .label{display:block;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
   font-size:.58rem;color:var(--muted);margin-bottom:.35rem}
 .vault-cell .v{font-family:var(--ff-num);font-weight:700;font-size:1.1rem;font-variant-numeric:tabular-nums}
 .vault-foot{display:flex;align-items:center;justify-content:center;gap:.6rem;font-family:var(--ff-pixel);
-  font-size:.55rem;color:var(--green);letter-spacing:.02em}
+  font-size:.6rem;color:var(--green);letter-spacing:.02em}
 .vault-foot .led{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);
   animation:ledpulse 1.4s ease-in-out infinite}
 @keyframes ledpulse{50%{opacity:.35;box-shadow:0 0 3px var(--green)}}
 
-/* ============================================================ HOW IT WORKS ============================================================ */
+/* ============================================================ HOW IT WORKS ============================================================
+   No cards. The emblem art already carries the step number and its label
+   plate — boxing it and restating both was the redundancy. Four badges on a
+   dashed rail, staggered heights, the payoff step largest. */
 .how{padding-top:var(--sect);padding-bottom:var(--sect)}
-.how-grid{display:flex;align-items:stretch;justify-content:center;gap:.5rem}
-.how-card{flex:1 1 0;min-width:0}
-.how-card .arcade-in{display:flex;flex-direction:column;align-items:center;gap:.7rem;text-align:center;
-  padding:1.2rem 1rem 1.4rem;height:100%}
-.how-head{display:flex;align-items:center;gap:.6rem;align-self:stretch;justify-content:center}
-.how-num{font-family:var(--ff-display);font-weight:800;font-size:1.3rem;color:var(--green);
-  width:34px;height:34px;display:flex;align-items:center;justify-content:center;
-  border:2px solid var(--green);clip-path:polygon(6px 0,100% 0,calc(100% - 6px) 100%,0 100%);
-  box-shadow:0 0 10px rgba(145,255,0,.4)}
-.how-title{font-family:var(--ff-display);font-weight:800;text-transform:uppercase;letter-spacing:.04em;
-  font-size:1.3rem;color:var(--green)}
-.how-card.pink .how-num{color:var(--pink);border-color:var(--pink);box-shadow:0 0 10px rgba(255,47,155,.4)}
-.how-card.pink .how-title{color:var(--pink)}
-.how-card .emblem{height:clamp(94px,12vw,128px);width:auto;filter:drop-shadow(0 8px 18px rgba(0,0,0,.5))}
-.how-card p{color:#b9c2c0;font-size:.92rem;font-weight:500;max-width:24ch;margin-top:auto}
-.chev{align-self:center;font-family:var(--ff-display);font-weight:800;color:var(--green);font-size:1.9rem;
-  opacity:.6;flex:0 0 auto}
+.how-rail{position:relative;display:flex;align-items:flex-start;
+  gap:clamp(.8rem,2.4vw,2rem);padding:1.2rem 0 .4rem}
+.how-rail::before{content:"";position:absolute;top:96px;left:3%;right:3%;
+  border-top:1px dashed rgba(145,255,0,.25)}
+.how-step{position:relative;flex:1 1 0;min-width:0;display:flex;flex-direction:column;
+  align-items:center;text-align:center;gap:.8rem}
+.how-step .emblem{height:clamp(104px,12vw,148px);width:auto;
+  filter:drop-shadow(0 10px 22px rgba(0,0,0,.55))}
+.how-step.lift{margin-top:2.6rem}
+.how-step.payoff{margin-top:1rem}
+.how-step.payoff .emblem{height:clamp(128px,15vw,184px);
+  filter:drop-shadow(0 12px 26px rgba(0,0,0,.6)) drop-shadow(0 0 22px rgba(145,255,0,.18))}
+.how-step p{color:#9fb0a8;font-size:.9rem;font-weight:500;max-width:23ch;line-height:1.5}
+.how-step.payoff p{color:#c3d4c9}
 
 /* ============================================================ LEADERBOARD ============================================================ */
 .leaderboard{padding-top:var(--sect);padding-bottom:var(--sect)}
-.lb-layout{display:grid;grid-template-columns:210px 1fr 210px;gap:1.1rem;align-items:start}
+.lb-layout{display:grid;grid-template-columns:224px 1fr 224px;gap:1.1rem;align-items:stretch}
 .lb-center{display:flex;flex-direction:column;gap:1.1rem;min-width:0}
 
-/* side panels */
-.side-panel .arcade-in{padding:1rem .9rem;display:flex;flex-direction:column;gap:.7rem;text-align:center}
+/* side panels — stretch to the table's height so the three columns read as
+   one composed row instead of frames ending at three different heights */
+.side-panel .arcade-in{padding:1rem .9rem;display:flex;flex-direction:column;gap:.7rem;text-align:center;
+  height:100%}
+.side-panel .legends-list{flex:1}
+.winner .winner-badge{margin-top:auto}
+.winner .winner-time{margin-top:auto}
+.side-foot{margin-top:auto;padding-top:.6rem;border-top:1px dashed rgba(145,255,0,.16);
+  font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.14em;
+  color:rgba(217,255,214,.4)}
 .side-title{font-family:var(--ff-display);font-weight:800;text-transform:uppercase;letter-spacing:.08em;
   font-size:1.05rem}
 .winner .side-title{color:var(--pink)}
@@ -405,13 +420,16 @@ section[id]{scroll-margin-top:76px}
   filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}
 .winner-name{font-family:var(--ff-display);font-weight:700;text-transform:uppercase;letter-spacing:.04em;
   color:var(--white);font-size:1.05rem;background:rgba(255,47,155,.12);border:1px solid rgba(255,47,155,.3);
-  border-radius:8px;padding:.25rem .5rem}
+  clip-path:polygon(8px 0,100% 0,calc(100% - 8px) 100%,0 100%);padding:.3rem .7rem}
 .winner-stats{display:flex;justify-content:center;gap:1rem}
 .winner-stats div{display:flex;flex-direction:column;gap:.1rem}
 .winner-stats .k{font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:.56rem;color:var(--muted)}
 .winner-stats .s{font-family:var(--ff-num);font-weight:700;color:var(--pink);font-size:1.05rem}
 .winner-stats .w{font-family:var(--ff-num);font-weight:700;color:var(--green);font-size:1.05rem}
-.winner-time{font-family:var(--ff-pixel);font-size:.5rem;color:var(--muted);letter-spacing:.04em}
+/* UI font, not Press Start 2P at 8px — that rendered illegible and wrapped
+   mid-phrase ("FIRST WINNER TAKES THE CROWN") */
+.winner-time{font-family:var(--ff-ui);font-weight:700;font-size:.72rem;color:var(--muted);
+  letter-spacing:.18em;text-transform:uppercase;line-height:1.5}
 .legends-list{display:flex;flex-direction:column;gap:.45rem;text-align:left}
 .legends-list li{display:flex;align-items:center;gap:.5rem;font-family:var(--ff-num);font-weight:700;font-size:.92rem}
 .legends-list .rk{color:var(--muted);width:18px}
@@ -470,7 +488,14 @@ section[id]{scroll-margin-top:76px}
 /* designed empty state (table + cards share it) */
 .lb-empty{display:flex;flex-direction:column;align-items:center;gap:.55rem;
   padding:2.1rem 1rem 2.3rem;text-align:center}
-.lb-empty img{height:92px;width:auto;opacity:.9;filter:drop-shadow(0 0 18px rgba(145,255,0,.25))}
+/* circular crop into the take-the-pot emblem: shows the money bag, hides the
+   baked-in step-number badge and label plate that made a stray "4" float in
+   the empty state. Composition only — the asset is untouched. */
+.lb-emblem-crop{position:relative;width:96px;height:96px;border-radius:50%;overflow:hidden;
+  box-shadow:0 0 0 2px rgba(145,255,0,.3),0 0 20px rgba(145,255,0,.18);
+  background:#08130b}
+.lb-emblem-crop img{position:absolute;width:172%;height:172%;max-width:none;
+  left:-36%;top:-30%;filter:saturate(.92)}
 .lb-empty-title{font-family:var(--ff-pixel);font-size:.72rem;color:var(--green);letter-spacing:.06em;
   text-shadow:0 0 10px rgba(145,255,0,.5);margin-top:.35rem}
 .lb-empty p{color:rgba(217,255,214,.62);font-size:.95rem;font-weight:500;max-width:36ch;line-height:1.5}
@@ -497,7 +522,9 @@ section[id]{scroll-margin-top:76px}
   text-shadow:0 0 8px rgba(255,47,155,.45)}
 .faq-q{font-family:var(--ff-display);font-weight:700;text-transform:uppercase;letter-spacing:.05em;
   font-size:clamp(1.02rem,1.6vw,1.2rem);color:var(--white);flex:1;min-width:0;transition:color .18s ease}
-.faq-chev{flex:0 0 auto;width:26px;height:26px;border:2px solid var(--green);position:relative;
+/* +/- marker LEADS the row (order:-1) instead of sitting orphaned at the far
+   right edge, 700px from the text it controls. */
+.faq-chev{flex:0 0 auto;order:-1;width:26px;height:26px;border:2px solid var(--green);position:relative;
   clip-path:polygon(5px 0,100% 0,calc(100% - 5px) 100%,0 100%);
   display:flex;align-items:center;justify-content:center;box-shadow:0 0 8px rgba(145,255,0,.3);
   transition:box-shadow .18s ease}
@@ -507,23 +534,28 @@ section[id]{scroll-margin-top:76px}
 .faq-item[open] summary{background:rgba(145,255,0,.05)}
 .faq-item[open] .faq-q{color:var(--green)}
 .faq-item summary:hover .faq-chev{box-shadow:0 0 14px rgba(145,255,0,.55)}
-.faq-item p{color:#b9c2c0;font-size:.95rem;font-weight:500;line-height:1.6;max-width:62ch;
-  padding:.1rem 2.6rem 1.2rem 2.5rem;animation:faqfade .28s ease}
+/* answers indent to the question's text start and get a real measure —
+   was 62ch of Rajdhani (~420px) lost inside an 860px panel */
+.faq-item p{color:#b9c2c0;font-size:1rem;font-weight:500;line-height:1.62;max-width:70ch;
+  padding:.1rem 1rem 1.25rem 76px;animation:faqfade .28s ease}
 @keyframes faqfade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 @media (max-width:560px){
   .faq-item p{padding-inline:.45rem}
 }
 
-/* ============================================================ CTA + FOOTER ============================================================ */
+/* ============================================================ CTA + FOOTER ============================================================
+   The closing block is an arcade frame now — it was the one big 20px rounded
+   rectangle undercutting the chamfered corner language. */
 .footer-wrap{padding-top:var(--sect);padding-bottom:clamp(28px,5vw,48px)}
-.footer-block{position:relative;background:linear-gradient(180deg,#0b1312,#04080a);
-  border:1px solid rgba(145,255,0,.2);border-radius:20px;overflow:hidden;
-  box-shadow:0 44px 90px -52px #000,inset 0 1px 0 rgba(255,255,255,.05)}
-.footer-block::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;z-index:3;
-  background:linear-gradient(90deg,transparent,var(--green) 28%,var(--pink) 72%,transparent);opacity:.8}
+.footer-block.arcade{--cut:24px}
+.footer-block>.arcade-in{--cut:22px}
+.footer-block .arcade-in::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;z-index:3;
+  background:linear-gradient(90deg,transparent,var(--green) 28%,var(--pink) 72%,transparent);opacity:.7}
 .cta-panel{display:grid;grid-template-columns:286px 1fr clamp(210px,25%,330px);align-items:stretch;
   gap:clamp(1.1rem,2.4vw,2rem);padding:clamp(1.7rem,3vw,2.6rem)}
-.about-card{background:rgba(0,0,0,.4);border:1px solid rgba(145,255,0,.18);border-radius:14px;
+.about-card{background:rgba(0,0,0,.4);border:1px solid rgba(145,255,0,.18);
+  clip-path:polygon(12px 0,calc(100% - 12px) 0,100% 12px,100% calc(100% - 12px),
+    calc(100% - 12px) 100%,12px 100%,0 calc(100% - 12px),0 12px);
   padding:1.4rem;display:flex;flex-direction:column;gap:.85rem;align-self:start}
 .about-card h3{font-family:var(--ff-display);font-weight:800;text-transform:uppercase;letter-spacing:.08em;
   color:var(--green);font-size:1.2rem}
@@ -543,15 +575,21 @@ section[id]{scroll-margin-top:76px}
 .cta-main .btn.big{max-width:540px;padding:1.2em 2em;font-size:1.2rem}
 .cta-sub{font-family:var(--ff-display);font-weight:700;letter-spacing:.08em;text-transform:uppercase;
   color:var(--green);font-size:clamp(.95rem,1.8vw,1.2rem);margin-top:1rem}
-.cta-bird-cell{position:relative;display:flex;align-items:flex-end;justify-content:center;min-width:0}
-.cta-bird{width:100%;max-width:340px;height:auto;margin-bottom:-2px;
-  filter:drop-shadow(0 16px 30px rgba(0,0,0,.5));pointer-events:none}
+.cta-bird-cell{position:relative;display:flex;align-items:stretch;justify-content:center;min-width:0}
+/* the bird's baked-in backdrop becomes the screen of its own small cabinet */
+.cta-bird-frame{width:100%;max-width:330px;align-self:center}
+.cta-bird-frame .arcade-in{display:flex;flex-direction:column}
+.cta-bird{width:100%;height:auto;display:block;pointer-events:none;
+  background:#071510}
+.cta-bird-tag{display:block;text-align:center;font-family:"IBM Plex Mono",monospace;
+  font-size:.68rem;letter-spacing:.18em;color:rgba(217,255,214,.45);
+  padding:.55rem .4rem .7rem;border-top:1px dashed rgba(145,255,0,.2)}
 .footer-bar{display:flex;align-items:center;justify-content:space-between;gap:1.2rem;flex-wrap:wrap;
-  border-top:1px solid rgba(145,255,0,.16);padding:1.15rem clamp(1.5rem,3vw,2.4rem);background:rgba(0,0,0,.25)}
+  border-top:1px solid rgba(145,255,0,.16);padding:.55rem clamp(1.5rem,3vw,2.4rem);background:rgba(0,0,0,.25)}
 .footer-bar img.flogo{height:32px;width:auto}
-.footer-links{display:flex;gap:clamp(1rem,2.4vw,2rem);flex-wrap:wrap}
+.footer-links{display:flex;gap:clamp(.6rem,1.8vw,1.4rem);flex-wrap:wrap}
 .footer-links a{font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:.74rem;color:var(--muted);
-  transition:color .18s}
+  transition:color .18s;display:inline-flex;align-items:center;min-height:44px;padding:0 .35rem}
 .footer-links a:hover{color:var(--green)}
 .footer-copy{color:var(--muted);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase}
 
@@ -575,7 +613,9 @@ section[id]{scroll-margin-top:76px}
   font-size:1.7rem;color:var(--white);padding:.5rem 0;border:0;border-bottom:1px solid rgba(255,255,255,.06);
   background:transparent;text-align:left;cursor:pointer;font:inherit;width:100%}
 .drawer-nav a.play,.drawer-nav .drawer-cta.play{color:var(--green);text-shadow:0 0 18px rgba(145,255,0,.4)}
-.drawer-pot{margin-top:auto;background:rgba(0,0,0,.4);border:1px solid rgba(145,255,0,.2);border-radius:12px;
+.drawer-pot{margin-top:auto;background:rgba(0,0,0,.4);border:1px solid rgba(145,255,0,.2);
+  clip-path:polygon(11px 0,calc(100% - 11px) 0,100% 11px,100% calc(100% - 11px),
+    calc(100% - 11px) 100%,11px 100%,0 calc(100% - 11px),0 11px);
   padding:1rem;text-align:center}
 .drawer-pot .label{font-weight:700;letter-spacing:.16em;text-transform:uppercase;font-size:.62rem;color:var(--muted)}
 .drawer-pot .v{font-family:var(--ff-num);font-weight:800;color:var(--green);font-size:2rem;
@@ -585,53 +625,79 @@ section[id]{scroll-margin-top:76px}
 .reveal{opacity:0;transform:translateY(26px);transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.3,1)}
 .reveal.in{opacity:1;transform:none}
 .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);
-  background:#0a1413;border:1px solid var(--border);color:var(--white);padding:.85rem 1.3rem;border-radius:12px;
+  background:#0a1413;border:1px solid var(--border);color:var(--white);padding:.85rem 1.5rem;
+  clip-path:polygon(12px 0,calc(100% - 12px) 0,100% 12px,100% calc(100% - 12px),
+    calc(100% - 12px) 100%,12px 100%,0 calc(100% - 12px),0 12px);
   font-weight:700;letter-spacing:.04em;z-index:120;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;
-  box-shadow:0 18px 40px -18px rgba(145,255,0,.4);display:flex;align-items:center;gap:.6rem;font-size:.9rem}
+  display:flex;align-items:center;gap:.6rem;font-size:.9rem}
 .toast .led{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* ============================================================ RESPONSIVE ============================================================ */
 @media (min-width:1081px){
   /* the cabinet column is far taller than the vault's content; let the vault
-     hug its content and ride along instead of leaving a dead void below it */
+     hug its content and ride along instead of leaving a dead void below it.
+     top:100px keeps the straddling VAULT tab (17px above the frame) clear of
+     the 68px sticky header — at 82px the label parked permanently clipped. */
   .arena{align-items:start}
-  .vault{position:sticky;top:82px}
+  .vault{position:sticky;top:100px}
 }
 @media (max-width:1080px){
   .arena{grid-template-columns:1fr}
   .vault{max-width:520px;width:100%;margin-inline:auto}
-  .how-grid{flex-wrap:wrap;gap:1rem}
-  .how-card{flex:1 1 calc(50% - 1rem)}
-  .how-grid .chev{display:none}
   .lb-layout{grid-template-columns:1fr;max-width:680px;margin-inline:auto}
-  .side-panel{display:none}
+  /* keep the champion — the emotional centre of the product — on tablet;
+     only the redundant legends duplicate is dropped */
+  .side-panel.legends{display:none}
+  .side-panel.winner{max-width:680px;width:100%;margin-inline:auto}
+  .winner .arcade-in{display:grid;grid-template-columns:auto 1fr;align-items:center;
+    column-gap:1.2rem;text-align:left;padding:1rem 1.2rem}
+  .winner .side-title{grid-column:1/-1}
+  .winner .winner-badge{grid-row:span 3;margin:0}
+  .winner .winner-stats{justify-content:flex-start}
+  .winner .winner-time{margin-top:.1rem}
+  .winner-name{justify-self:start}
 }
 @media (max-width:880px){
   .nav-desktop{display:none}
   .hamburger{display:flex}
-  .hero{grid-template-columns:1fr;text-align:center;gap:.5rem;padding-top:20px}
-  .hero-left{display:flex;flex-direction:column;align-items:center;order:2}
-  .hero-right{order:1;min-height:auto}
-  .hero-bird{width:min(80%,380px)}
-  .hero-body{margin-inline:auto}
-  .hero-cta{justify-content:center}
+  /* Mobile hero is COMPOSED, not a centred reflow: copy stays left-aligned
+     with the pot leading, the bird anchors the right edge and is allowed to
+     bleed off it — a deliberate crop, not an accident. */
+  .hero{grid-template-columns:1.08fr .92fr;gap:.6rem;align-items:end;padding-top:14px}
+  .hero-title{max-width:420px}
+  .hero-right{min-height:auto;align-self:end;justify-content:flex-end}
+  .hero-bird{width:min(118%,360px);max-width:none;transform:translateX(12%)}
   .hero-cta .btn{flex:1 1 auto}
-  .built-on{justify-content:center}
   .cta-panel{grid-template-columns:1fr}
   .cta-bird-cell{order:3;margin-top:.5rem}
-  .cta-bird{max-width:300px;margin:0 auto -1.2rem}
+  .cta-bird-frame{max-width:300px}
   .cta-main{text-align:center;align-items:center;min-height:auto;padding-top:1.2rem}
+  .how-rail{flex-direction:column;align-items:stretch;gap:1.5rem;padding:0 0 .4rem}
+  .how-rail::before{top:8px;bottom:8px;left:51px;right:auto;border-top:none;
+    border-left:1px dashed rgba(145,255,0,.25)}
+  .how-step,.how-step.lift,.how-step.payoff{margin-top:0;flex-direction:row;text-align:left;
+    align-items:center;gap:1.1rem}
+  .how-step .emblem{height:96px;flex:0 0 auto;position:relative;z-index:1}
+  .how-step.payoff .emblem{height:118px;margin-left:-11px}
+  .how-step p{max-width:34ch}
 }
 @media (max-width:680px){
-  .statbar .arcade-in{grid-template-columns:1fr;gap:.2rem;padding:.5rem .8rem}
-  .stat{flex-direction:row;justify-content:space-between;align-items:center;padding:.65rem .4rem}
-  .stat+.stat{border-left:none;border-top:1px solid rgba(145,255,0,.12)}
-  .how-card{flex:1 1 100%}
   .lb-table{display:none}
   .lb-cards{display:flex}
-  .footer-bar{flex-direction:column;align-items:flex-start;gap:.9rem}
+  .footer-bar{flex-direction:column;align-items:flex-start;gap:.4rem;padding-block:.9rem}
   .footer-copy{font-size:.62rem}
+}
+@media (max-width:600px){
+  /* single column: full-width copy block first, bird tucked to the right
+     edge below the CTAs — no 160px voids, pot in the first screen */
+  .hero{display:block;padding-top:10px}
+  .hero-title{max-width:300px}
+  .hero-headline{font-size:clamp(2.5rem,11.5vw,3.4rem)}
+  .hero-pot .hp-value{font-size:clamp(2.6rem,12vw,3.6rem)}
+  .hero-right{margin:-2.2rem calc(var(--pad) * -1) 0 auto;width:62%;justify-content:flex-end}
+  .hero-bird{width:100%;max-width:300px;transform:translateX(9%)}
+  .bolt-fx{display:none}
 }
 @media (max-width:520px){
   /* keep the header on one calm line: smaller brand, tighter actions,
@@ -644,6 +710,10 @@ section[id]{scroll-margin-top:76px}
   .hero-cta{flex-direction:column;width:100%}
   .hero-cta .btn{width:100%}
   .vault-grid{grid-template-columns:1fr}
+  .how-rail::before{left:47px}
+  .how-step .emblem{height:88px}
+  .how-step.payoff .emblem{height:104px;margin-left:-8px}
+  .faq-item p{padding-left:.45rem}
 }
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;

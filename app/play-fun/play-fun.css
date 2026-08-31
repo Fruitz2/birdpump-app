@@ -1,0 +1,209 @@
+/* /play-fun — the free-play room, dressed in the same arcade-cabinet
+   language as the landing page. Before this file existed the route was a
+   bare canvas: two links floating in the top-left corner, control buttons
+   aligned to nothing, and a start overlay that dimmed the playfield to
+   near-black. Now the game sits in a cabinet with a marquee, the header is
+   composed, and the controls belong to the frame they sit in. */
+
+.pf-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  color: #f6f7f7;
+  font-family: "Rajdhani", system-ui, sans-serif;
+  background:
+    radial-gradient(58% 48% at 10% 0%, rgba(145, 255, 0, 0.09), transparent 60%),
+    radial-gradient(54% 44% at 92% 6%, rgba(255, 47, 155, 0.08), transparent 60%),
+    #020506;
+  overflow: hidden;
+}
+.pf-root::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background: repeating-linear-gradient(to bottom, rgba(145, 255, 0, 0.018) 0 1px, transparent 1px 3px);
+  mix-blend-mode: screen;
+}
+
+/* ─── header strip ─── */
+.pf-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px clamp(12px, 3vw, 28px);
+  border-bottom: 1px solid rgba(145, 255, 0, 0.14);
+  background: linear-gradient(to bottom, rgba(2, 5, 6, 0.9), rgba(2, 5, 6, 0.55));
+  flex: 0 0 auto;
+  z-index: 5;
+}
+.pf-top-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 0;
+}
+.pf-top-side.right {
+  justify-content: flex-end;
+}
+.pf-logo {
+  height: 40px;
+  width: auto;
+  flex: 0 0 auto;
+}
+.pf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-decoration: none;
+  color: #00ff41;
+  background: rgba(0, 255, 65, 0.08);
+  border: 2px solid #00ff41;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  text-shadow: 0 0 6px #00ff41;
+  transition: background 0.2s ease, filter 0.2s ease;
+}
+.pf-btn:hover {
+  background: rgba(0, 255, 65, 0.16);
+}
+.pf-btn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.9);
+}
+.pf-btn.real {
+  color: #ff2d78;
+  border-color: #ff2d78;
+  background: rgba(255, 45, 120, 0.1);
+  text-shadow: 0 0 6px #ff2d78;
+}
+.pf-btn.real:hover {
+  background: rgba(255, 45, 120, 0.2);
+}
+
+/* ─── stage: the cabinet ─── */
+.pf-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 26px 12px 8px;
+}
+.pf-cab {
+  --cut: 18px;
+  position: relative;
+  padding: 2px;
+}
+/* border ring on ::before so the marquee tab escaping the top isn't clipped */
+.pf-cab::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #ff2f9b, #35202c 55%, #ff2f9b);
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut),
+    100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%,
+    0 calc(100% - var(--cut)), 0 var(--cut));
+  filter: drop-shadow(0 0 10px rgba(255, 47, 155, 0.22));
+}
+.pf-cab-in {
+  --cut: 16px;
+  position: relative;
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut),
+    100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%,
+    0 calc(100% - var(--cut)), 0 var(--cut));
+  background:
+    radial-gradient(circle at 11px 11px, #646b70 0 2.4px, transparent 3px),
+    radial-gradient(circle at calc(100% - 11px) 11px, #646b70 0 2.4px, transparent 3px),
+    radial-gradient(circle at 11px calc(100% - 11px), #646b70 0 2.4px, transparent 3px),
+    radial-gradient(circle at calc(100% - 11px) calc(100% - 11px), #646b70 0 2.4px, transparent 3px),
+    linear-gradient(162deg, #14100e 0%, #0a0709 60%, #120d10 100%);
+  padding: 24px 14px 16px;
+}
+.pf-marquee {
+  position: absolute;
+  top: -17px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(180deg, #0d1615, #070d0c);
+  border: 2px solid #ff2f9b;
+  border-bottom: none;
+  box-shadow: 0 0 12px rgba(255, 47, 155, 0.4);
+  padding: 6px 22px;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 13px) 100%, 13px 100%);
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: #ff2f9b;
+  text-shadow: 0 0 6px #ff2f9b;
+  white-space: nowrap;
+}
+.pf-marquee img {
+  height: 20px;
+  width: auto;
+  display: block;
+}
+
+/* the screen: 9:16, sized from whichever axis is tighter */
+.pf-screen {
+  position: relative;
+  aspect-ratio: 9 / 16;
+  height: min(calc(100dvh - 210px), 168vw);
+  max-height: 900px;
+  border: 2px solid rgba(255, 47, 155, 0.5);
+  overflow: hidden;
+  background: #030a03;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.3), inset 0 0 46px rgba(0, 0, 0, 0.35);
+}
+.pf-screen:fullscreen {
+  aspect-ratio: auto;
+  height: 100vh;
+  max-height: none;
+}
+
+.pf-hint {
+  flex: 0 0 auto;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: rgba(0, 255, 65, 0.45);
+  text-align: center;
+  padding-bottom: 6px;
+}
+
+@media (max-width: 560px) {
+  .pf-logo {
+    display: none;
+  }
+  .pf-top-side {
+    flex: 0 1 auto;
+  }
+  .pf-top {
+    justify-content: space-between;
+  }
+  .pf-stage {
+    padding: 24px 8px 6px;
+  }
+  .pf-cab-in {
+    padding: 22px 8px 10px;
+  }
+  .pf-screen {
+    height: min(calc(100dvh - 188px), 176vw);
+  }
+  .pf-hint {
+    font-size: 7px;
+  }
+}
