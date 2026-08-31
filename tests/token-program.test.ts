@@ -198,3 +198,57 @@ describe("treasury account self-healing", () => {
     expect(ataIxs).toHaveLength(1);
   });
 });
+
+describe("token configuration source", () => {
+  const ENV_KEYS = ["PUMPBIRD_TOKEN_MINT", "PUMPBIRD_TOKEN_DECIMALS", "PUMPBIRD_TOKEN_PROGRAM"];
+  const saved: Record<string, string | undefined> = {};
+  for (const k of ENV_KEYS) saved[k] = process.env[k];
+  afterEach(() => {
+    for (const k of ENV_KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k]!;
+    }
+  });
+
+  it("reports 'none' and no mint when nothing is configured", async () => {
+    for (const k of ENV_KEYS) delete process.env[k];
+    const m = await import("@/lib/config/token");
+    // the committed file ships with mint: null until a launch writes it
+    expect(m.tokenConfigSource()).toBe("none");
+    expect(m.tokenMintAddress()).toBeNull();
+    expect(m.isTokenConfigured()).toBe(false);
+  });
+
+  it("env wins over the committed file and reports itself as the source", async () => {
+    process.env.PUMPBIRD_TOKEN_MINT = MINT.toBase58();
+    const m = await import("@/lib/config/token");
+    expect(m.tokenConfigSource()).toBe("env");
+    expect(m.tokenMintAddress()).toBe(MINT.toBase58());
+    expect(m.isTokenConfigured()).toBe(true);
+  });
+
+  it("defaults decimals to 6 and the program to token2022", async () => {
+    for (const k of ENV_KEYS) delete process.env[k];
+    const m = await import("@/lib/config/token");
+    expect(m.tokenDecimals()).toBe(6);
+    expect(m.tokenProgramName()).toBe("token2022");
+  });
+
+  it("only the exact string 'legacy' selects the classic program", async () => {
+    const m = await import("@/lib/config/token");
+    process.env.PUMPBIRD_TOKEN_PROGRAM = "legacy";
+    expect(m.tokenProgramName()).toBe("legacy");
+    for (const bad of ["Legacy", "classic", "", "token2022"]) {
+      process.env.PUMPBIRD_TOKEN_PROGRAM = bad;
+      expect(m.tokenProgramName()).toBe("token2022");
+    }
+  });
+
+  it("rejects a nonsense decimals override rather than propagating it", async () => {
+    const m = await import("@/lib/config/token");
+    for (const bad of ["abc", "-1", "99"]) {
+      process.env.PUMPBIRD_TOKEN_DECIMALS = bad;
+      expect(m.tokenDecimals()).toBe(6);
+    }
+  });
+});

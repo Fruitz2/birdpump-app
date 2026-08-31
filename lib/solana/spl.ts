@@ -6,6 +6,7 @@ import {
   SystemProgram,
   TransactionInstruction
 } from "@solana/web3.js";
+import { tokenProgramName } from "@/lib/config/token";
 
 export const TOKEN_PROGRAM_ID = new PublicKey(
   "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
@@ -31,9 +32,7 @@ export const TOKEN_2022_PROGRAM_ID = new PublicKey(
  * (including unset) selects Token-2022, because that is what pump.fun issues.
  */
 export function getTokenProgramId(): PublicKey {
-  return process.env.PUMPBIRD_TOKEN_PROGRAM === "legacy"
-    ? TOKEN_PROGRAM_ID
-    : TOKEN_2022_PROGRAM_ID;
+  return tokenProgramName() === "legacy" ? TOKEN_PROGRAM_ID : TOKEN_2022_PROGRAM_ID;
 }
 export const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(
   "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"

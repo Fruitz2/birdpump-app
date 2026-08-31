@@ -11,6 +11,7 @@
 
 import { PublicKey } from "@solana/web3.js";
 import { getRedis } from "@/lib/kv/client";
+import { tokenMintAddress, tokenDecimals } from "@/lib/config/token";
 import { getSolUsd } from "./birdeye";
 import {
   fetchBondingCurve,
@@ -56,21 +57,18 @@ type CachedPrice = Omit<PumpBirdQuote, "rawForUsdCents" | "available"> & {
 };
 
 export async function getPumpBirdPrice(): Promise<PumpBirdQuoteResult> {
-  const mintAddr = process.env.PUMPBIRD_TOKEN_MINT;
-  const decimals = Number.parseInt(
-    process.env.PUMPBIRD_TOKEN_DECIMALS ?? "6",
-    10
-  );
+  const mintAddr = tokenMintAddress();
+  const decimals = tokenDecimals();
 
   if (!mintAddr) {
-    return { available: false, reason: "PUMPBIRD_TOKEN_MINT not set" };
+    return { available: false, reason: "token mint not configured yet" };
   }
 
   let mint: PublicKey;
   try {
     mint = new PublicKey(mintAddr);
   } catch {
-    return { available: false, reason: "PUMPBIRD_TOKEN_MINT not a valid pubkey" };
+    return { available: false, reason: "configured token mint is not a valid pubkey" };
   }
 
   // Try cache first

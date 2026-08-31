@@ -2,6 +2,7 @@ import { Keypair, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import bs58 from "bs58";
 import { getConnection } from "./connection";
 import { getAssociatedTokenAddress } from "./spl";
+import { tokenMintAddress, tokenDecimals } from "@/lib/config/token";
 
 let _treasury: Keypair | null = null;
 
@@ -38,13 +39,13 @@ export function getTreasuryAddress(): PublicKey {
 }
 
 export function getTokenMint(): PublicKey {
-  const m = process.env.PUMPBIRD_TOKEN_MINT;
-  if (!m) throw new Error("PUMPBIRD_TOKEN_MINT not set");
+  const m = tokenMintAddress();
+  if (!m) throw new Error("token mint not configured (token.config.json / PUMPBIRD_TOKEN_MINT)");
   return new PublicKey(m);
 }
 
 export function getTokenDecimals(): number {
-  return Number.parseInt(process.env.PUMPBIRD_TOKEN_DECIMALS ?? "6", 10);
+  return tokenDecimals();
 }
 
 export function getTreasuryAta(): PublicKey {

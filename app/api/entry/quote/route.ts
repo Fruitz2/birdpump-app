@@ -1,4 +1,5 @@
 import { route } from "@/lib/http/middleware";
+import { tokenProgramName } from "@/lib/config/token";
 import { ok } from "@/lib/http/response";
 import { getPumpBirdPrice, rawToDisplay } from "@/lib/price/pumpbird";
 import { getTreasuryAddress, getTreasuryAta } from "@/lib/solana/treasury";
@@ -49,7 +50,7 @@ export const GET = route(
       entryUsdCents: totalCents,
       tokenMint: price.tokenMint,
       tokenDecimals: price.tokenDecimals,
-      tokenProgram: process.env.PUMPBIRD_TOKEN_PROGRAM === "legacy" ? "legacy" : "token2022",
+      tokenProgram: tokenProgramName(),
       tokenUsd: price.tokenUsd,
       tokenSol: price.tokenSol,
       solUsd: price.solUsd,

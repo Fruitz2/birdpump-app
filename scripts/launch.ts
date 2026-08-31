@@ -40,6 +40,8 @@ import {
 import { deriveBondingCurvePda, fetchBondingCurve } from "@/lib/solana/pumpfun";
 import { getSolUsd } from "@/lib/price/birdeye";
 import { getPumpBirdPrice, rawToDisplay } from "@/lib/price/pumpbird";
+import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 type Check = { name: string; ok: boolean; detail: string; blocker: boolean };
 const checks: Check[] = [];
@@ -282,16 +284,48 @@ async function main() {
   // constant, and a graduated token cannot be priced at all.
   record("BIRDEYE_API_KEY", Boolean(process.env.BIRDEYE_API_KEY), process.env.BIRDEYE_API_KEY ? "set" : "missing");
 
-  // ---- 8. what to paste into Vercel ----------------------------------------
+  // ---- 8. write the token identity into the repo ---------------------------
+  //
+  // The contract address is public, so it belongs in a committed file rather
+  // than a hosting dashboard. Writing it here means the launch is a commit,
+  // which anyone with repo access can ship and which deploys itself. Nobody
+  // has to be logged into the hosting provider at the moment the token goes
+  // live.
+  const cfgPath = resolve(process.cwd(), "token.config.json");
+  if (!checkOnly) {
+    writeFileSync(
+      cfgPath,
+      JSON.stringify(
+        {
+          mint: mint.toBase58(),
+          decimals,
+          program: tokenProgramName,
+          launchedAt: new Date().toISOString(),
+          note: "Written by `npm run launch -- <CA>`. The contract address is public information, so it lives in the repo and a launch is a commit that deploys itself. Secrets never go here. process.env.PUMPBIRD_TOKEN_MINT still overrides this if it is set."
+        },
+        null,
+        2
+      ) + "\n"
+    );
+    record("token.config.json", true, `written: mint, decimals=${decimals}, ${tokenProgramName}`);
+  } else {
+    record("token.config.json", true, "not written (--check)", false);
+  }
+
   console.log("\n" + "=".repeat(72));
-  console.log("SET THESE IN THE HOSTING ENV (Production), then redeploy:\n");
-  console.log(`  PUMPBIRD_TOKEN_MINT=${mint.toBase58()}`);
-  console.log(`  PUMPBIRD_TOKEN_DECIMALS=${decimals}`);
-  console.log(`  PUMPBIRD_TOKEN_PROGRAM=${tokenProgramName}`);
-  console.log(`  NEXT_PUBLIC_TREASURY_ADDRESS=${treasury.publicKey.toBase58()}`);
-  console.log(`  SLIPPAGE_BPS=1000`);
-  console.log("\nThen verify the deployed site is quoting for real:\n");
-  console.log("  npm run launch:verify\n");
+  if (!checkOnly) {
+    console.log("NEXT: commit and deploy. The mint now lives in the repo.\n");
+    console.log("  git add token.config.json && git commit -m \"Launch: set the $PUMPBIRD mint\"");
+    console.log("  <deploy as the repo owner>\n");
+    console.log("Then prove production is quoting for real:\n");
+    console.log("  npm run launch:verify\n");
+    console.log("Nothing else needs setting. NEXT_PUBLIC_TREASURY_ADDRESS and SLIPPAGE_BPS are");
+    console.log("optional overrides only:\n");
+    console.log(`  NEXT_PUBLIC_TREASURY_ADDRESS=${treasury.publicKey.toBase58()}`);
+    console.log(`  SLIPPAGE_BPS=1000  (this is already the default)\n`);
+  } else {
+    console.log("Read only run. Re-run without --check to write token.config.json.\n");
+  }
 
   finish();
 }

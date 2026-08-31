@@ -80,22 +80,29 @@ The proof is in `tests/token-program.test.ts`: the Token-2022 derived address fo
 exists on chain with the expected owner and mint, and the classic derived address for the same
 pair does not exist at all.
 
-## Environment variables
+## The token lives in the repo, not in a dashboard
 
-Set these in the hosting environment after running `npm run launch`, which prints them filled
-in. Note: PumpBird does **not** deploy through the nebryx personal Vercel account, so do not
-reach for that token or CLI here.
+`npm run launch` writes `token.config.json` at the repo root:
 
-| Variable | Notes |
-|---|---|
-| `PUMPBIRD_TOKEN_MINT` | the CA |
-| `PUMPBIRD_TOKEN_DECIMALS` | read off the mint, do not guess |
-| `PUMPBIRD_TOKEN_PROGRAM` | `token2022` for any pump.fun launch |
-| `NEXT_PUBLIC_TREASURY_ADDRESS` | must match `TREASURY_SECRET_KEY`, which is checked at boot |
-| `SLIPPAGE_BPS` | defaults to 1000. See below before lowering it |
+```json
+{ "mint": "<CA>", "decimals": 6, "program": "token2022", "launchedAt": "..." }
+```
 
-Already required and unrelated to the token: `DATABASE_URL`, `KV_REST_API_URL`,
+A contract address is public. It is printed on the site, posted on X, and pasted into every
+trading bot on the chain. It is not a secret and it has no business being a hosting-dashboard
+variable, because that makes launching depend on somebody being logged into the hosting
+provider at the exact moment the token goes live.
+
+Keeping it in a committed file means **the launch is a commit, and the commit deploys itself.**
+Anyone with repo access can ship it. `process.env.PUMPBIRD_TOKEN_MINT` still overrides the file
+if you ever need to change the mint without a deploy.
+
+Nothing else has to be set for the token. `SLIPPAGE_BPS` already defaults to 1000 and
+`NEXT_PUBLIC_TREASURY_ADDRESS` is an optional consistency check against `TREASURY_SECRET_KEY`.
+
+Secrets, unrelated to the token and already configured: `DATABASE_URL`, `KV_REST_API_URL`,
 `KV_REST_API_TOKEN`, `TREASURY_SECRET_KEY`, `JWT_SECRET`, `HELIUS_API_KEY`, `BIRDEYE_API_KEY`.
+These never go in `token.config.json`.
 
 ## Why the slippage band defaults to 10%
 
@@ -150,8 +157,9 @@ the transfer confirms and only from `failed`, so two concurrent runs cannot pay 
    $PUMPBIRD. Entry works with an empty treasury because the treasury token account self-heals
    on the first payment, so this is needed before anyone can WIN, not before anyone can play
 3. Launch the token on pump.fun
-4. `npm run launch:go -- <CA>`, which creates the treasury token account and prints the env
-5. Set the printed environment variables and redeploy
+4. `npm run launch:go -- <CA>`, which creates the treasury token account and writes
+   `token.config.json`
+5. Commit that file and deploy. No dashboard, no environment variables
 6. `npm run launch:verify`
 7. **Buy one life with a real wallet and play it.** Nothing before this proves the end to end
    flow, because the flow cannot exist until the mint does

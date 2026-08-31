@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { route } from "@/lib/http/middleware";
+import { tokenProgramName } from "@/lib/config/token";
 import { ok, bad, err } from "@/lib/http/response";
 import { db } from "@/lib/db/client";
 import { tickets, users } from "@/lib/db/schema";
@@ -129,7 +130,7 @@ export const POST = route(
         // Which token program the mint lives under. The browser needs this to
         // derive the right ATA and target the right program; pump.fun mints
         // are Token-2022, and a wrong value silently sends nowhere.
-        tokenProgram: process.env.PUMPBIRD_TOKEN_PROGRAM === "legacy" ? "legacy" : "token2022",
+        tokenProgram: tokenProgramName(),
         // true only until the treasury token account exists on chain
         createTreasuryAta: needsTreasuryAta,
         treasury,
