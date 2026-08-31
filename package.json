@@ -24,7 +24,8 @@
     "refund:mispaid": "tsx scripts/refund-mispaid.ts",
     "launch:go": "spectra-vault run --env TREASURY_SECRET_KEY --env PUMPBIRD_BIRDEYE_API_KEY --env PUMPBIRD_HELIUS_API_KEY -- tsx scripts/launch.ts",
     "launch:go:check": "spectra-vault run --env TREASURY_SECRET_KEY --env PUMPBIRD_BIRDEYE_API_KEY --env PUMPBIRD_HELIUS_API_KEY -- tsx scripts/launch.ts --check",
-    "refund:go": "spectra-vault run --env TREASURY_SECRET_KEY --env PUMPBIRD_BIRDEYE_API_KEY --env PUMPBIRD_HELIUS_API_KEY -- tsx scripts/refund-mispaid.ts"
+    "refund:go": "spectra-vault run --env TREASURY_SECRET_KEY --env PUMPBIRD_BIRDEYE_API_KEY --env PUMPBIRD_HELIUS_API_KEY -- tsx scripts/refund-mispaid.ts",
+    "settle:retry": "spectra-vault run --env TREASURY_SECRET_KEY --env PUMPBIRD_BIRDEYE_API_KEY --env PUMPBIRD_HELIUS_API_KEY -- tsx scripts/retry-settlement.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

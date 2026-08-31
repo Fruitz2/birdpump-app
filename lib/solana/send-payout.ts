@@ -28,6 +28,66 @@ export type SplPayoutResult =
   | { ok: true; signature: string; slot: bigint; createdAta: boolean }
   | { ok: false; reason: string };
 
+/**
+ * Can the treasury actually complete a payout of `amountRaw` right now?
+ *
+ * This exists because settlement zeroes the pot and advances the epoch inside
+ * a database transaction BEFORE the transfer is attempted. If the transfer
+ * then fails, the pot is gone from the ledger and the winner has nothing. The
+ * cheapest failure to cause is an empty treasury: signing costs SOL, and
+ * creating the winner's token account costs about 0.002 SOL of rent on top.
+ *
+ * So the settlement path calls this first and refuses to settle at all when it
+ * returns false. Nothing is lost, the record stands, and the payout can be
+ * completed once the treasury is funded.
+ */
+export async function canPayout(input: {
+  toWallet: string;
+  amountRaw: bigint;
+}): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const conn = getConnection("confirmed");
+
+  let recipient: PublicKey;
+  try {
+    recipient = new PublicKey(input.toWallet);
+  } catch {
+    return { ok: false, reason: "invalid_recipient" };
+  }
+
+  const treasuryOwner = getTreasuryAddress();
+  const mint = getTokenMint();
+  const recipientAta = getAssociatedTokenAddress(mint, recipient);
+
+  const [lamports, treasuryAtaBal, recipientAtaInfo] = await Promise.all([
+    conn.getBalance(treasuryOwner, "confirmed").catch(() => null),
+    conn.getTokenAccountBalance(getTreasuryAta(), "confirmed").catch(() => null),
+    conn.getAccountInfo(recipientAta, "confirmed").catch(() => null)
+  ]);
+
+  if (lamports === null) return { ok: false, reason: "rpc_unavailable" };
+  if (!treasuryAtaBal) return { ok: false, reason: "treasury_ata_missing" };
+
+  const held = BigInt(treasuryAtaBal.value.amount);
+  if (held < input.amountRaw) {
+    return { ok: false, reason: `insufficient_treasury_tokens:${held}<${input.amountRaw}` };
+  }
+
+  // Signature plus priority fee, and the winner's token account rent when it
+  // does not exist yet. Rounded up generously: refusing a payout we could just
+  // afford is recoverable, attempting one we cannot is not.
+  const RENT_LAMPORTS = 2_100_000;
+  const FEE_LAMPORTS = 200_000;
+  const needed = FEE_LAMPORTS + (recipientAtaInfo ? 0 : RENT_LAMPORTS);
+  if (lamports < needed) {
+    return {
+      ok: false,
+      reason: `insufficient_treasury_sol:${lamports}<${needed}`
+    };
+  }
+
+  return { ok: true };
+}
+
 export async function sendPumpBirdPayout(input: {
   toWallet: string;
   amountRaw: bigint;

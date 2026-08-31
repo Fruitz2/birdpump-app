@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db/client";
 import { pot, scores, settlements, users } from "@/lib/db/schema";
-import { sendPumpBirdPayout } from "@/lib/solana/send-payout";
+import { sendPumpBirdPayout, canPayout } from "@/lib/solana/send-payout";
 import { getRedis, KV } from "@/lib/kv/client";
 import { invalidatePotCache } from "./state";
 
@@ -31,6 +31,32 @@ export async function settleIfNewHigh(scoreId: string): Promise<SettleResult> {
   }
 
   try {
+    // Settlement zeroes the pot and advances the epoch inside the transaction
+    // below, BEFORE the transfer is attempted. If the transfer then fails the
+    // pot is gone from the ledger and the winner has nothing, with only a
+    // `failed` settlement row to show for it. So establish that the treasury
+    // can actually pay before touching any of it.
+    //
+    // Refusing here leaves the pot, the high score and the epoch exactly as
+    // they were. That is recoverable: fund the treasury and the next
+    // qualifying run settles normally. Zeroing a pot we cannot pay is not.
+    const [preRow] = await db.select().from(pot).where(eq(pot.id, 1)).limit(1);
+    const [preScore] = await db.select().from(scores).where(eq(scores.id, scoreId)).limit(1);
+    if (preRow && preScore && preScore.score > preRow.allTimeHighScore && preRow.potTokenAmount > 0n) {
+      const able = await canPayout({
+        toWallet: preScore.wallet,
+        amountRaw: preRow.potTokenAmount
+      }).catch((e) => ({ ok: false as const, reason: `precheck_threw:${(e as Error).message}` }));
+      if (!able.ok) {
+        console.error(
+          `[settle] REFUSING to settle ${scoreId}: treasury cannot pay (${able.reason}). ` +
+            "Pot, high score and epoch left untouched. Fund the treasury, then run " +
+            "`npm run settle:retry`."
+        );
+        return { kind: "skipped", reason: `treasury_cannot_pay:${able.reason}` };
+      }
+    }
+
     const phase1 = await db.transaction(async (tx) => {
       const [scoreRow] = await tx
         .select()
