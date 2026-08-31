@@ -117,13 +117,38 @@ the confirm route uses, never from anything a client claimed. The status flips t
 only after the transfer confirms, and only from `mispaid`, so two concurrent runs cannot pay
 twice.
 
+## If a winner does not get paid
+
+Settlement zeroes the pot, advances the epoch and credits the winner in one database
+transaction, and only then sends the tokens. So a failed transfer used to mean the pot was gone
+from the ledger and the winner had nothing.
+
+`canPayout()` now runs before any of that and settlement refuses to start when the treasury
+cannot complete the transfer, leaving the pot, the high score and the epoch untouched. The
+common cause was an unfunded treasury, which is why funding it matters before anyone can win
+rather than before anyone can play.
+
+A transfer can still fail for reasons no precheck rules out: an RPC timeout, an expiring
+blockhash, congestion. Those winners are paid with:
+
+```bash
+npm run settle:retry -- --list       # everyone still owed
+npm run settle:retry -- --all        # pay them
+npm run settle:retry -- <ID>         # pay one
+```
+
+Safe to run repeatedly. It only touches `failed` rows, takes the amount from the settlement
+record rather than recomputing it, re-checks `canPayout` first, and flips to `sent` only after
+the transfer confirms and only from `failed`, so two concurrent runs cannot pay twice.
+
 ## Launch day order
 
 1. **Get `main` deployed.** See the deploy access note below, this is the one step that is
    blocked on someone else
 2. **Fund the treasury with SOL**: `AMnaq33vDkV4A9se8Xzuz9c4EP3cj9KcWJWfg7WeXu77`. 0.2 SOL is
    plenty. It pays payout fees and ~0.002 SOL of rent per winner token account. Send SOL, not
-   $PUMPBIRD
+   $PUMPBIRD. Entry works with an empty treasury because the treasury token account self-heals
+   on the first payment, so this is needed before anyone can WIN, not before anyone can play
 3. Launch the token on pump.fun
 4. `npm run launch:go -- <CA>`, which creates the treasury token account and prints the env
 5. Set the printed environment variables and redeploy
