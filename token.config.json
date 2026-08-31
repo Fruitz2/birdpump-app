@@ -1,7 +1,7 @@
 {
-  "mint": null,
+  "mint": "AE5VFCiSKMqR8T3TdcCHYpCjTeHFzDzsaWnFbPp2HB4k",
   "decimals": 6,
   "program": "token2022",
-  "launchedAt": null,
+  "launchedAt": "2026-08-31T20:34:04.765Z",
   "note": "Written by `npm run launch -- <CA>`. The contract address is public information, so it lives in the repo and a launch is a commit that deploys itself. Secrets never go here. process.env.PUMPBIRD_TOKEN_MINT still overrides this if it is set."
 }
